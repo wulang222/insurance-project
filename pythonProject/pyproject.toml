@@ -1,0 +1,67 @@
+﻿[project]
+name = "insurance-agent-platform"
+version = "0.1.0"
+description = "智能保险推荐与知识问答平台 — LangGraph + PostgreSQL + MySQL"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "langchain>=1.0.0",
+    "langchain-anthropic>=1.0.0",
+    "langgraph>=1.0.0",
+    "python-dotenv>=1.0.1",
+    "langchain-openai>=0.3.0",
+    "langchain-chroma>=0.2.0",
+    "chromadb>=0.5.0",
+    "pymysql>=1.1.0",
+    "langgraph-checkpoint-postgres>=3.0.0",
+    "psycopg[binary]>=3.2.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.15,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "anyio>=4.7.0",
+    "langgraph-cli[inmem]>=0.4.10",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=0.25.0",
+    "ruff>=0.8.0",
+]
+
+vectorizer = [
+    "pymilvus>=2.5.0",
+    "pypdf>=5.0.0",
+    "python-docx>=1.1.0",
+    "openpyxl>=3.1.0",
+    "dashscope>=1.20.0",
+]
+
+[tool.uv.build-backend]
+module-name = "insurance_agent"
+source-include = ["langgraph.json", ".env.example", "Makefile", "tests/**"]
+
+[[tool.uv.build-backend.packages]]
+from = "src/insurance_agent"
+include = ["**/*.py"]
+
+[[tool.uv.build-backend.packages]]
+from = "src/knowledge_agent"
+include = ["**/*.py"]
+
+[[tool.uv.build-backend.packages]]
+from = "src/crm_agent"
+include = ["**/*.py"]
+
+[[tool.uv.build-backend.packages]]
+from = "src/supervisor_agent"
+include = ["**/*.py"]
+
+[[tool.uv.build-backend.packages]]
+from = "src/shared"
+include = ["**/*.py"]
+
+[[tool.uv.build-backend.packages]]
+from = "src/vectorizer"
+include = ["**/*.py"]

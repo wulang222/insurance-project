@@ -1,0 +1,237 @@
+version: '3.8'
+#启动命令 docker compose -p insurance -f docker-compose-mid.yml up -d
+services:
+  insurance-mysql:
+    container_name: insurance-mysql
+    image: mysql:8.4.2
+    ports:
+      - "3306:3306"
+    volumes:
+      # 数据挂载
+      - ../data/insurancedata/mysql/data:/var/lib/mysql
+      # 配置挂载
+      - ./mysql/init/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./mysql/sql:/opt/sql
+    command: [
+      'mysqld',
+      '--innodb-buffer-pool-size=80M',
+      '--character-set-server=utf8mb4',
+      '--collation-server=utf8mb4_unicode_ci',
+      '--default-time-zone=+8:00',
+      '--lower-case-table-names=1',
+      '--explicit_defaults_for_timestamp=true',
+      '--server-id=1',
+      '--log-bin=mysql-bin',
+      '--binlog-ignore-db=mysql',
+      '--binlog-cache-size=256M',
+      '--binlog-format=ROW',
+      '--max_connections=2000'
+    ]
+    restart: always
+    networks:
+      - insurance_network
+    healthcheck:
+      test: mysql --user=insurancedev -h127.0.0.1 --password='insurance@123' -e "SELECT 1;"
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: insurance@123
+    ulimits:
+      nproc: 65535
+      nofile:
+        soft: 20000
+        hard: 40000
+  insurance-nacos:
+    container_name: insurance-nacos
+    image: nacos/nacos-server:v2.2.2
+    environment:
+      - MODE=standalone
+      - JVM_XMS=512m
+      - JVM_XMX=512m
+      - JVM_XMN=256m
+      - SPRING_DATASOURCE_PLATFORM=mysql
+      - MYSQL_SERVICE_HOST=insurance-mysql
+      - MYSQL_SERVICE_PORT=3306
+      - MYSQL_SERVICE_DB_NAME=insurance_nacos_dev
+      - MYSQL_SERVICE_USER=insurancedev
+      - MYSQL_SERVICE_PASSWORD=insurance@123
+    volumes:
+      - ../data/insurancedata/nacos/logs/:/home/nacos/logs
+      - ../data/insurancedata/nacos/tomcatlogs/:/home/bit/nacos/tomcat/logs/
+      - ./nacos/conf/application.properties:/home/nacos/conf/application.properties
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+      - "9849:9849"
+    restart: always
+    networks:
+      - insurance_network
+    depends_on:
+      insurance-mysql:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8848/nacos" ]
+      start_period: 30s
+      interval: 10s
+      timeout: 10s
+      retries: 10
+  insurance-redis:
+    container_name: insurance-redis
+    image: redis:7.0.15
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis/conf/redis.conf:/usr/local/etc/redis/redis.conf
+      - ../data/insurancedata/redis/data:/data
+    command: redis-server /usr/local/etc/redis/redis.conf
+    restart: always
+    networks:
+      - insurance_network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  insurance-rabbitmq:
+    image: rabbitmq:3.12.6-management
+    container_name: insurance-rabbitmq
+    restart: always
+    hostname: insurance-rabbitmq
+    environment:
+      # 用户名
+      RABBITMQ_DEFAULT_USER: admin
+      # 密码
+      RABBITMQ_DEFAULT_PASS: insurance@123
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ../data/insurancedata/rabbitmq/log:/var/log/rabbitmq
+      - ../data/insurancedata/rabbitmq/data:/var/lib/rabbitmq
+    networks:
+      - insurance_network
+    healthcheck:
+      test: [ "CMD", "rabbitmqctl", "status" ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  insurance-milvus-etcd:
+    container_name: insurance-milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.18
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ../data/insurancedata/milvus/etcd:/etcd
+    command: etcd -advertise-client-urls=http://insurance-milvus-etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    networks:
+      - insurance_network
+    healthcheck:
+      test: [ "CMD", "etcdctl", "endpoint", "health" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  insurance-milvus-minio:
+    container_name: insurance-milvus-minio
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    environment:
+      # 将原来的 ACCESS_KEY 和 SECRET_KEY 替换为以下两行：
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9001:9001"
+      - "9000:9000"
+    volumes:
+      - ../data/insurancedata/milvus/miniodata:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    networks:
+      - insurance_network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+
+  insurance-milvus-standalone:
+    container_name: insurance-milvus-standalone
+    # 【核心修改】：退回到全网最稳定的 2.4.15 版本
+    image: milvusdb/milvus:v2.4.15
+    command: [ "milvus", "run", "standalone" ]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: insurance-milvus-etcd:2379
+      MINIO_ADDRESS: insurance-milvus-minio:9000
+      # 【核心修改】：直接删掉 MQ_TYPE 这一行，不要写 woodpecker 也不要写 rocksmq
+    volumes:
+      - ../data/insurancedata/milvus/data:/var/lib/milvus
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9091/healthz" ]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    networks:
+      - insurance_network
+    depends_on:
+      - "insurance-milvus-etcd"
+      - "insurance-milvus-minio"
+
+  insurance-attu:
+    container_name: insurance-attu
+    image: zilliz/attu:v2.6
+    environment:
+      MILVUS_URL: insurance-milvus-standalone:19530
+    ports:
+      - "3000:3000"
+    restart: always
+    networks:
+      - insurance_network
+    depends_on:
+      insurance-milvus-standalone:
+        condition: service_healthy
+
+  insurance-postgres:
+    container_name: insurance-postgres
+    image: postgres:16.3-alpine
+    ports:
+      - "5432:5432"
+    volumes:
+      # 数据持久化
+      - ../data/insurancedata/postgres/data:/var/lib/postgresql/data
+      # 初始化脚本（可选，将你的 .sql 文件放在 ./postgres/init/ 下）
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    environment:
+      TZ: Asia/Shanghai
+      POSTGRES_USER: insurancedev
+      POSTGRES_PASSWORD: insurance@123
+      POSTGRES_DB: insurance_postgres_dev
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "max_connections=200"
+    restart: always
+    networks:
+      - insurance_network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U insurancedev -d insurance_postgres_dev" ]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+networks:
+  insurance_network:

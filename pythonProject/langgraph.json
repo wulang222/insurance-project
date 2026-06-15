@@ -1,0 +1,14 @@
+﻿{
+  "$schema": "https://langgra.ph/schema.json",
+  "python_version": "3.13",
+  "dependencies": ["."],
+  "graphs": {
+    "agent": "simple_agent.graph:graph",
+    "insurance_agent": "insurance_agent.graph:graph",
+    "knowledge_agent": "knowledge_agent.graph:graph",
+    "crm_agent": "crm_agent.graph:graph",
+    "supervisor_agent": "supervisor_agent.graph:graph"
+  },
+  "env": ".env",
+  "image_distro": "wolfi"
+}

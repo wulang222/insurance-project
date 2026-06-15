@@ -1,0 +1,3 @@
+com.insurance.insurancecommonmessage.config.AliSmsConfig
+com.insurance.insurancecommonmessage.service.AliSmsService
+com.insurance.insurancecommonmessage.service.CaptchaService

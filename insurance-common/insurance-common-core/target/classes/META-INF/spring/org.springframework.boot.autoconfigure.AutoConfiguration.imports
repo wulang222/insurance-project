@@ -1,0 +1,2 @@
+com.insurance.insurancecommoncore.config.RestTemplateConfig
+com.insurance.insurancecommoncore.config.ThreadPoolConfig

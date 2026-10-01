@@ -1,7 +1,5 @@
 ﻿"""Unit tests for insurance_agent tools."""
 
-import json
-import pytest
 
 from insurance_agent.tools import (
     _fallback_regex_extract,

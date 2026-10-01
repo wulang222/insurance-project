@@ -18,7 +18,7 @@ MILVUS_COLLECTION = os.getenv("MILVUS_COLLECTION", "file_documents")
 MILVUS_USER = os.getenv("MILVUS_USER", "")
 MILVUS_PASSWORD = os.getenv("MILVUS_PASSWORD", "")
 
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-v4")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-v3")
 EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "1024"))
 
 DASHSCOPE_API_KEY = os.getenv("DASHSCOPE_API_KEY", "")

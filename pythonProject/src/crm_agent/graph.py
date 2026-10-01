@@ -41,13 +41,8 @@ async def load_customer_node(state: CRMAgentState) -> dict:
     user_id = state.get("user_id", "")
     messages = state.get("messages", [])
 
-    # 从对话消息中提取用户ID（如果未指定），兼容 dict 和对象
+    # 当请求携带消息但未指定用户时，保留原有默认用户行为。
     if not user_id and messages:
-        last_msg = messages[-1]
-        if isinstance(last_msg, dict):
-            content = last_msg.get("content", str(last_msg))
-        else:
-            content = getattr(last_msg, "content", str(last_msg))
         user_id = "default_user"
 
     data = load_customer_data.invoke({"user_id": user_id})
@@ -172,14 +167,14 @@ def _simple_report(state: CRMAgentState) -> str:
     risk_emoji = "🔴" if churn >= 60 else "🟡" if churn >= 30 else "🟢"
 
     lines = [
-        f"## 📊 CRM 客户洞察报告",
-        f"",
-        f"### 客户概览",
+        "## 📊 CRM 客户洞察报告",
+        "",
+        "### 客户概览",
         f"- 客户: {profile.get('name', '未知')}",
         f"- 等级: {profile.get('membership_level', 'standard')}",
         f"- 年度保费: {profile.get('total_premium', 0)}元",
-        f"",
-        f"### ⚠️ 风险预警",
+        "",
+        "### ⚠️ 风险预警",
         f"{risk_emoji} 流失风险评分: {churn}/100",
     ]
 
@@ -196,7 +191,7 @@ def _simple_report(state: CRMAgentState) -> str:
     lines.append("")
     lines.append("### 📋 建议行动")
     lines.append(f"1. 优先处理保单续保提醒（共{len(nodes)}个关键节点）")
-    lines.append(f"2. 跟进客户情感趋势，主动联系了解需求")
+    lines.append("2. 跟进客户情感趋势，主动联系了解需求")
     lines.append(f"3. 推荐{len(upsells)}个加购机会，优先高优先级产品")
 
     return "\n".join(lines)

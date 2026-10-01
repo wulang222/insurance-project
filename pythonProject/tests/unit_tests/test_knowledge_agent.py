@@ -1,7 +1,5 @@
 ﻿"""单元测试 — 知识回答Agent"""
 
-import pytest
-import json
 
 from knowledge_agent.tools import (
     _fallback_intent_recognition,
@@ -194,19 +192,14 @@ class TestKnowledgeAgentState:
     def test_default_values(self):
         from knowledge_agent.state import KnowledgeAgentState
         state = KnowledgeAgentState()
-        assert state.get("messages") == []
-        assert state.get("raw_question") == ""
-        assert state.get("rewritten_question") == ""
-        assert state.get("intent") == ""
-        assert state.get("db_results") == []
-        assert state.get("rag_docs") == []
-        assert state.get("final_answer") == ""
+        # TypedDict 只提供静态类型约束，运行时不注入默认值。
+        assert state == {}
 
     def test_custom_values(self):
         from knowledge_agent.state import KnowledgeAgentState
         state = KnowledgeAgentState(messages=["hello"], raw_question="什么是重疾险")
         assert len(state["messages"]) == 1
         assert state["raw_question"] == "什么是重疾险"
-        # 没传的字段应有默认值
-        assert state["intent"] == ""
-        assert state["db_results"] == []
+        # total=False 允许节点按需逐步填充其他字段。
+        assert "intent" not in state
+        assert "db_results" not in state

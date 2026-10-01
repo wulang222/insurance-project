@@ -22,10 +22,9 @@ from typing import Any
 from insurance_agent.config import (
     create_llm,
     DASHSCOPE_API_KEY,
-    DASHSCOPE_BASE_URL,
     MYSQL_CONFIG,
 )
-from knowledge_agent.config import RAG_COLLECTIONS, RAG_TOP_K
+from knowledge_agent.config import RAG_TOP_K
 from knowledge_agent.prompts import (
     QUERY_REWRITE_SYSTEM,
     QUERY_REWRITE_USER,
@@ -617,7 +616,7 @@ def _format_rag_results_for_llm(rag_docs: list[dict]) -> str:
     """将RAG检索结果格式化为带来源信息的文本。"""
     parts = []
     for i, doc in enumerate(rag_docs, 1):
-        source = doc.get("source", doc.get("collection", ""))
+        source = doc.get("source") or doc.get("collection", "")
         score = doc.get("score", 0)
         source_tag = f" [{source}] (相关度: {score:.2f})" if source and score else f" [{source}]" if source else ""
         parts.append(f"【资料{i}】{source_tag}\n{doc['content']}")

@@ -209,7 +209,7 @@ async def route_request_node(state: SupervisorAgentState) -> dict:
             if llm_route in ("insurance_agent", "knowledge_agent", "crm_agent"):
                 route = llm_route
                 reason = str(parsed.get("reason", "classified by LLM"))
-        except Exception as exc:
+        except Exception:
             pass  # 规则路由已经覆盖了主要场景，LLM 失败静默处理
 
     return {"route": route, "route_reason": reason}

@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
 
 from pymilvus import (
     Collection,
     CollectionSchema,
     DataType,
     FieldSchema,
-    MilvusClient,
     connections,
     utility,
 )
@@ -141,16 +139,6 @@ class MilvusWriter:
             except Exception as e:
                 logger.error("嵌入生成失败 (batch %d): %s", start // batch_size, e)
                 continue
-
-            # 组装插入数据
-            entities = [
-                [c.file_path for c in batch],
-                [c.file_type for c in batch],
-                [c.chunk_index for c in batch],
-                [c.text for c in batch],
-                embeddings,
-                [json.dumps(c.metadata, ensure_ascii=False) for c in batch],
-            ]
 
             # 方案一：严格按照 Schema 的顺序组装数据
             try:

@@ -1,60 +1,63 @@
-# Simple Agent Template
+# Insurance Agent Platform
 
-Minimal deployment template for a LangChain agent built with `create_agent(...)`.
+Python Agent 服务的主入口是 `supervisor_agent`：它保留现有路由行为，将请求分发给保险推荐、知识问答或 CRM 分析 Agent。`src/harness` 定义后续重构共用的运行协议，Day 1 不改变现有业务流程。
 
-## What this template gives you
+## 环境
 
-- A deployable LangGraph entrypoint at `src/simple_agent/graph.py`.
-- Two small tools (`utc_now`, `calculator`) for predictable local behavior.
-- `langgraph.json` configured for LangSmith/LangGraph deployment.
-- A `uv`-managed local workflow with a small `Makefile` wrapper and starter tests.
+- Python 3.13
+- `uv`
+- 通义千问 / DashScope 兼容接口
+- MySQL：保险产品等结构化业务数据
+- PostgreSQL：LangGraph Checkpoint 和长期 Store
+- Milvus：唯一在线向量库
 
-## Quickstart
+`chroma_data/` 是早期实验数据，不是在线运行依赖。
 
-1. Sync the project with `uv`:
-
-```bash
-uv sync --dev
-```
-
-2. Configure environment:
+## 安装与配置
 
 ```bash
-cp .env .env
+cd /Users/a1234/project/insurance-project/pythonProject
+uv sync --all-groups
+cp .env.example .env
 ```
 
-3. Run locally:
+按本地环境修改 `.env`，不要提交真实密钥。
+
+## 启动
+
+FastAPI 接口：
+
+```bash
+uv run uvicorn server:app --host 0.0.0.0 --port 18084 --reload
+```
+
+LangGraph 开发服务：
 
 ```bash
 uv run langgraph dev
 ```
 
-Optional `make` wrappers:
+旧 Java Portal 依赖的兼容接口为 `POST /chat` 和 `POST /chat/stream`。
+
+## 测试和静态检查
+
+Day 1 验收命令：
 
 ```bash
-make dev
-make run
+uv run python -m pytest tests/contract tests/unit_tests -q
+uv run python -m ruff check src tests
 ```
 
-## Tests and lint
+Contract 测试会 mock LLM、MySQL 和 Milvus，不依赖外部服务。需要显式运行供应商集成测试时，设置 `RUN_EXTERNAL_INTEGRATION_TESTS=true`。
 
-```bash
-make test
-make integration-tests
-make lint
-make format
-```
+## 目录入口
 
-Integration tests are skipped unless `ANTHROPIC_API_KEY` is set.
+- `server.py`：FastAPI HTTP/SSE 入口
+- `src/supervisor_agent/`：当前业务路由入口
+- `src/insurance_agent/`：保险推荐
+- `src/knowledge_agent/`：DB + Milvus 知识问答
+- `src/crm_agent/`：CRM 分析
+- `src/harness/`：统一运行类型、错误和依赖容器
+- `src/vectorizer/`：文档向量化到 Milvus
 
-## Deploy to LangSmith
-
-1. Push this template to a Git repository.
-2. In LangSmith, create a new Deployment from that repo.
-3. Set required environment variables (`ANTHROPIC_API_KEY`, optionally `LANGSMITH_API_KEY`).
-4. Deploy using `langgraph.json` defaults.
-
-## Reference docs
-
-- LangChain quickstart: https://docs.langchain.com/oss/python/langchain/quickstart
-- LangChain deployment: https://docs.langchain.com/oss/python/langchain/deploy
+`simple_agent` 仅作为早期示例保留，不是项目主入口；`langchain-anthropic` 也仅由该示例使用。

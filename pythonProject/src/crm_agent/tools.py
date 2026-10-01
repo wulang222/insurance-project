@@ -9,16 +9,10 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any
 
 from langchain_core.tools import tool
 
 from crm_agent.config import create_llm
-from crm_agent.state import (
-    CustomerProfile,
-    CustomerPolicy,
-    CustomerInteraction,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -180,8 +174,6 @@ def _fallback_sentiment(interactions: list) -> dict:
     labels = [i.get("sentiment_label", "neutral") for i in interactions]
     pos = labels.count("positive")
     neg = labels.count("negative")
-    neu = labels.count("neutral")
-
     if neg > pos:
         overall = "偏向负面"
         trend = "下滑"
@@ -356,7 +348,7 @@ def identify_upsell_opportunities(profile_json: str, policies_json: str) -> list
     Returns:
         list of dicts: 每个加购机会包含 product_type, reason, priority, estimated_premium
     """
-    profile = json.loads(profile_json) if isinstance(profile_json, str) else profile_json
+    _profile = json.loads(profile_json) if isinstance(profile_json, str) else profile_json
     policies = json.loads(policies_json) if isinstance(policies_json, str) else policies_json
 
     # 获取已有险种

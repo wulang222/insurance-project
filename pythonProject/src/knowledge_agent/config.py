@@ -13,19 +13,12 @@ import os
 
 
 # ── RAG 多集合配置 ──────────────────────────────────────────
-# 课题二中定义了多层架构，这里用多个 Chroma collection 模拟：
-#   - insurance_terms     : 条款解释（等待期、免责、保障范围等）
-#   - insurance_claims    : 理赔规则与案例
-#   - insurance_faq       : 常见问题
+# 在线 RAG 统一使用 Milvus。下列名字是逻辑资料分类。
 RAG_COLLECTIONS = {
     "terms": os.getenv("RAG_COLLECTION_TERMS", "insurance_terms"),
     "claims": os.getenv("RAG_COLLECTION_CLAIMS", "insurance_claims"),
     "faq": os.getenv("RAG_COLLECTION_FAQ", "insurance_faq"),
 }
-
-# Chroma 本地持久化目录
-CHROMA_PERSIST_DIR = os.getenv("VECTOR_PERSIST_DIR", "./chroma_data")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-v4")
 
 # RAG 检索参数
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))  # 每个 collection 检索数量

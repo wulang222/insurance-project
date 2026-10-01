@@ -14,13 +14,13 @@ install:
 	uv sync --no-dev
 
 dev:
-	uv sync
+	uv sync --all-groups
 
 run:
 	uv run langgraph dev
 
 test:
-	uv run python -m pytest tests/unit_tests -q
+	uv run python -m pytest tests/contract tests/unit_tests -q
 
 integration-tests:
 	uv run python -m pytest tests/integration_tests -q

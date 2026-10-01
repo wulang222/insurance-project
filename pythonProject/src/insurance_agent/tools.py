@@ -11,19 +11,19 @@ from langchain_core.tools import tool
 from insurance_agent.config import (
     MYSQL_CONFIG,
     DASHSCOPE_API_KEY,
-    DASHSCOPE_BASE_URL,
-    DEFAULT_MODEL,
-    LLM_TEMPERATURE,
-    LLM_EXTRA_BODY,
     RAG_TOP_K,
-    RAG_QUERY_COUNT,
     create_llm,
 )
-from insurance_agent.state import UserProfile, REQUIRED_FIELDS
+from insurance_agent.state import REQUIRED_FIELDS
 from insurance_agent.prompts import (
     EXTRACT_PROFILE_SYSTEM_PROMPT,
     EXTRACT_PROFILE_USER_PROMPT,
     HISTORICAL_PROFILE_CONTEXT,
+)
+from shared.milvus_utils import (
+    get_embedding_function,
+    is_milvus_available,
+    milvus_search,
 )
 
 
@@ -278,14 +278,6 @@ def _mock_mysql_query(profile: dict) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Tool 3: RAG enrichment search（Milvus 向量检索，复用 shared/milvus_utils）
 # ---------------------------------------------------------------------------
-
-from shared.milvus_utils import (
-    is_milvus_available,
-    get_embedding_function,
-    get_milvus_collection,
-    milvus_search,
-)
-
 
 def _build_rag_queries(
     product: dict,

@@ -16,7 +16,6 @@ import json
 import logging
 from typing import Any, Literal
 
-from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt
@@ -346,7 +345,6 @@ def _create_checkpointer():
         pg_uri = os.getenv("POSTGRES_URI", "")
         if pg_uri:
             from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-            import asyncio
 
             async def _setup():
                 saver = AsyncPostgresSaver.from_conn_string(pg_uri)

@@ -39,6 +39,15 @@ uv run langgraph dev
 
 旧 Java Portal 依赖的兼容接口为 `POST /chat` 和 `POST /chat/stream`。
 
+持久化 Run API：
+
+- `POST /v1/runs`：创建运行
+- `GET /v1/runs/{run_id}`：查询状态
+- `GET /v1/runs/{run_id}/events`：读取 SSE 事件
+- `POST /v1/runs/{run_id}/resume`：使用原 `thread_id` 恢复中断
+
+正式 FastAPI 入口必须配置 `POSTGRES_URI`。Checkpointer、Store、MySQL 和 Milvus 客户端均由 lifespan 创建和释放，不在模块导入阶段连接外部服务。
+
 ## 测试和静态检查
 
 Day 1 验收命令：
@@ -46,6 +55,12 @@ Day 1 验收命令：
 ```bash
 uv run python -m pytest tests/contract tests/unit_tests -q
 uv run python -m ruff check src tests
+```
+
+Day 2 持久化与恢复测试：
+
+```bash
+uv run python -m pytest tests/integration -q
 ```
 
 Contract 测试会 mock LLM、MySQL 和 Milvus，不依赖外部服务。需要显式运行供应商集成测试时，设置 `RUN_EXTERNAL_INTEGRATION_TESTS=true`。

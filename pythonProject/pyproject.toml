@@ -72,5 +72,13 @@ include = ["**/*.py"]
 from = "src/harness"
 include = ["**/*.py"]
 
+[[tool.uv.build-backend.packages]]
+from = "src/infrastructure"
+include = ["**/*.py"]
+
+[[tool.uv.build-backend.packages]]
+from = "src/api"
+include = ["**/*.py"]
+
 [tool.ruff]
 target-version = "py313"

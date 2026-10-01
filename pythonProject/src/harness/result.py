@@ -25,8 +25,10 @@ class RequiredInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    type: str = "input_required"
     fields: list[str] = Field(min_length=1)
-    prompt: str = Field(min_length=1)
+    question: str = Field(min_length=1)
+    prompt: str | None = None
     reason: str | None = None
     schema_: dict[str, Any] = Field(default_factory=dict, alias="schema")
 

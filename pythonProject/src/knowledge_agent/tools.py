@@ -19,6 +19,7 @@ import json
 import re
 from typing import Any
 
+from harness.errors import DependencyUnavailableError
 from insurance_agent.config import (
     create_llm,
     DASHSCOPE_API_KEY,
@@ -179,11 +180,15 @@ def query_db_by_intent(question: str) -> list[dict]:
     query_params = _generate_db_query_params(question)
 
     # ══ Step 2: 执行SQL ══
-    # 优先尝试真实MySQL连接，失败则用mock数据
+    # 业务数据必须来自真实 MySQL，依赖故障不得伪装成空结果。
     try:
         return _execute_mysql_query(query_params)
-    except Exception:
-        return _mock_db_query(query_params)
+    except Exception as exc:
+        raise DependencyUnavailableError(
+            "MySQL is unavailable",
+            details={"dependency": "mysql"},
+            retryable=True,
+        ) from exc
 
 
 def _generate_db_query_params(question: str) -> dict:
@@ -387,19 +392,31 @@ def search_rag(question: str) -> list[dict]:
     )
 
     if not is_milvus_available():
-        return _mock_rag_search(question)
+        raise DependencyUnavailableError(
+            "Milvus or its embedding provider is unavailable",
+            details={"dependency": "milvus"},
+            retryable=True,
+        )
 
     embed_func = get_embedding_function()
     if embed_func is None:
-        return _mock_rag_search(question)
+        raise DependencyUnavailableError(
+            "Embedding provider is unavailable",
+            details={"dependency": "embedding"},
+            retryable=True,
+        )
 
     try:
         hits = milvus_search(question, top_k=RAG_TOP_K * 2)
-    except Exception:
-        return _mock_rag_search(question)
+    except Exception as exc:
+        raise DependencyUnavailableError(
+            "Milvus search failed",
+            details={"dependency": "milvus"},
+            retryable=True,
+        ) from exc
 
     if not hits:
-        return _mock_rag_search(question)
+        return []
 
     all_docs: list[dict] = []
     seen_contents = set()
@@ -416,7 +433,7 @@ def search_rag(question: str) -> list[dict]:
             "score": hit.get("score", 0),
         })
 
-    return all_docs if all_docs else _mock_rag_search(question)
+    return all_docs
 
 
 def _mock_rag_search(question: str) -> list[dict]:

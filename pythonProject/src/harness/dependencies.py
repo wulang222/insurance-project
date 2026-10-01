@@ -38,6 +38,8 @@ class AgentDependencies:
     llm_factory: LLMFactory
     checkpointer: BaseCheckpointSaver
     store: BaseStore
-    tool_gateway: ToolGateway
-    prompt_registry: PromptRegistry
-    tracer: Tracer
+    tool_gateway: ToolGateway | None = None
+    prompt_registry: PromptRegistry | None = None
+    tracer: Tracer | None = None
+    mysql_client: Any | None = None
+    milvus_client: Any | None = None

@@ -11,6 +11,7 @@ from harness.errors import (
     ToolExecutionError,
 )
 from harness.result import AgentResult, Citation, RequiredInput, ToolResult
+from harness.runtime import RunManager, RunSnapshot
 
 __all__ = [
     "AgentDependencies",
@@ -23,6 +24,8 @@ __all__ = [
     "PolicyDeniedError",
     "RequiredInput",
     "RunContext",
+    "RunManager",
+    "RunSnapshot",
     "ToolExecutionError",
     "ToolResult",
 ]

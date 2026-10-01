@@ -17,11 +17,11 @@ import logging
 from typing import Any, Literal
 
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt
 
 from insurance_agent.state import (
     InsuranceAgentState,
+    REQUIRED_FIELDS,
     UserProfile,
 )
 from insurance_agent.config import create_llm
@@ -38,10 +38,6 @@ from insurance_agent.tools import (
 
 logger = logging.getLogger(__name__)
 
-# Store 引用（在 build_graph 时注入，节点通过闭包访问）
-_store_ref: Any = None
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # Node 0: 从 Store 加载历史画像作为 LLM 提取的参考上下文
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -49,7 +45,11 @@ _store_ref: Any = None
 # 无论是否有历史画像，都进入 LLM 提取流程
 # 历史画像作为参考上下文传给 LLM，但以用户本次输入为准
 
-async def load_profile_from_store(state: InsuranceAgentState) -> dict:
+async def load_profile_from_store(
+    state: InsuranceAgentState,
+    *,
+    store: Any = None,
+) -> dict:
     """从 PostgreSQL Store 加载历史用户画像，作为 LLM 提取的参考上下文。
 
     场景：
@@ -64,12 +64,12 @@ async def load_profile_from_store(state: InsuranceAgentState) -> dict:
     - 冲突规则：用户本次输入与历史画像冲突时，以用户本次输入为准
     """
     user_id = state.get("user_id", "")
-    if not user_id or _store_ref is None:
+    if not user_id or store is None:
         return {}
 
     try:
         from shared.memory import UserMemoryStore
-        memory = UserMemoryStore(_store_ref)
+        memory = UserMemoryStore(store)
         stored_profile = await memory.load_user_profile(user_id)
 
         if stored_profile:
@@ -117,9 +117,20 @@ async def validate_profile_node(state: InsuranceAgentState) -> dict:
     if missing:
         missing_str = "、".join(missing)
         prompt = MISSING_FIELDS_PROMPT.format(missing_fields=missing_str)
+        missing_fields = [
+            field_name
+            for field_name, label in REQUIRED_FIELDS.items()
+            if label in missing
+        ]
 
         # Human-in-the-loop: interrupt and wait for user input
-        user_response = interrupt(prompt)
+        user_response = interrupt(
+            {
+                "type": "missing_profile_fields",
+                "fields": missing_fields,
+                "question": prompt,
+            }
+        )
 
         # Re-extract profile from the combined conversation + user response
         messages = state.get("messages", [])
@@ -130,8 +141,17 @@ async def validate_profile_node(state: InsuranceAgentState) -> dict:
         still_missing = validate_user_profile(updated_profile)
         if still_missing:
             still_missing_str = "、".join(still_missing)
+            still_missing_fields = [
+                field_name
+                for field_name, label in REQUIRED_FIELDS.items()
+                if label in still_missing
+            ]
             user_response2 = interrupt(
-                f"仍有以下信息缺失：{still_missing_str}。请补充："
+                {
+                    "type": "missing_profile_fields",
+                    "fields": still_missing_fields,
+                    "question": f"仍有以下信息缺失：{still_missing_str}。请补充：",
+                }
             )
             full_conversation += f"\n用户继续补充: {user_response2}"
             updated_profile = extract_user_profile.invoke({"conversation": full_conversation})
@@ -149,6 +169,8 @@ async def validate_profile_node(state: InsuranceAgentState) -> dict:
             budget=profile_raw.get("budget"),
             insurance_type=profile_raw.get("insurance_type"),
         )
+
+        profile_raw = updated_profile
 
     return {"user_profile": profile, "user_profile_raw": profile_raw}
 
@@ -268,7 +290,11 @@ async def generate_recommendation_node(state: InsuranceAgentState) -> dict:
 # 每次推荐完成后，将当前用户画像写入 PG Store
 # 下次新会话时，load_profile_from_store 会自动加载
 
-async def save_profile_to_store(state: InsuranceAgentState) -> dict:
+async def save_profile_to_store(
+    state: InsuranceAgentState,
+    *,
+    store: Any = None,
+) -> dict:
     """将用户画像保存到 PostgreSQL Store，实现跨会话持久化。
 
     策略：
@@ -280,12 +306,12 @@ async def save_profile_to_store(state: InsuranceAgentState) -> dict:
     profile = state.get("user_profile")
     profile_raw = state.get("user_profile_raw", {})
 
-    if not user_id or _store_ref is None or profile is None:
+    if not user_id or store is None or profile is None:
         return {}
 
     try:
         from shared.memory import UserMemoryStore
-        memory = UserMemoryStore(_store_ref)
+        memory = UserMemoryStore(store)
 
         # 1. 保存用户画像
         await memory.save_user_profile(user_id, {
@@ -335,58 +361,37 @@ def should_query_products(state: InsuranceAgentState) -> Literal["query_products
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Build the graph（支持 PG Checkpointer + Store 注入）
+# Build the graph（Checkpointer + Store 由应用生命周期注入）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _create_checkpointer():
-    """创建 Checkpointer：优先 PG，失败回退到 MemorySaver"""
-    try:
-        import os
-        pg_uri = os.getenv("POSTGRES_URI", "")
-        if pg_uri:
-            from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-
-            async def _setup():
-                saver = AsyncPostgresSaver.from_conn_string(pg_uri)
-                async with saver as s:
-                    await s.setup()
-                return s
-
-            # 同步环境下跳过，返回 MemorySaver 作为 fallback
-            # 在 langgraph dev 模式下，服务器会自动配置 PG checkpointer
-            logger.info("检测到 POSTGRES_URI，但同步回退到 MemorySaver；langgraph dev 模式下由服务器管理")
-            return MemorySaver()
-        else:
-            return MemorySaver()
-    except Exception:
-        return MemorySaver()
-
-
-def build_graph(store=None):
+def build_graph(*, checkpointer=None, store=None):
     """Build and compile the insurance recommendation agent graph.
 
     Args:
         store: 可选的 BaseStore 实例。传入时启用跨会话记忆：
                - 新会话先查 Store 加载历史画像作为 LLM 参考上下文
                - 推荐完成后保存画像到 Store
-               - 不传入时仅使用会话内 MemorySaver（独立模式）
+        checkpointer: 由 FastAPI lifespan 创建的持久化 Checkpointer。
 
     Returns:
         编译后的 StateGraph
     """
-    global _store_ref
-    _store_ref = store  # 节点通过闭包访问
-
     workflow = StateGraph(InsuranceAgentState)
 
+    async def load_profile_node(state: InsuranceAgentState) -> dict:
+        return await load_profile_from_store(state, store=store)
+
+    async def save_profile_node(state: InsuranceAgentState) -> dict:
+        return await save_profile_to_store(state, store=store)
+
     # ── 添加节点 ──
-    workflow.add_node("load_profile_from_store", load_profile_from_store)  # [NEW] 跨会话加载
+    workflow.add_node("load_profile_from_store", load_profile_node)
     workflow.add_node("extract_profile", extract_profile_node)
     workflow.add_node("validate_profile", validate_profile_node)
     workflow.add_node("query_products", query_products_node)
     workflow.add_node("enrich_products", enrich_products_node)
     workflow.add_node("generate_recommendation", generate_recommendation_node)
-    workflow.add_node("save_profile_to_store", save_profile_to_store)      # [NEW] 跨会话保存
+    workflow.add_node("save_profile_to_store", save_profile_node)
 
     # ── 入口 ──
     workflow.set_entry_point("load_profile_from_store")
@@ -409,13 +414,10 @@ def build_graph(store=None):
     workflow.add_edge("generate_recommendation", "save_profile_to_store")  # [NEW]
     workflow.add_edge("save_profile_to_store", END)
 
-    # ── 编译 ──
-    checkpointer = _create_checkpointer()
-    return workflow.compile(checkpointer=checkpointer)
+    return workflow.compile(checkpointer=checkpointer, store=store)
 
 
-# Module-level graph instance for langgraph.json（无 Store 的独立模式）
-# 得到编译后的可执行图
+# langgraph.json 的无持久化定义；正式 HTTP 入口由 lifespan 注入 PostgreSQL。
 graph = build_graph()
 
 

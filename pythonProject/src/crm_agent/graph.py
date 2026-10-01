@@ -17,7 +17,6 @@ import json
 import logging
 
 from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
 
 from crm_agent.state import CRMAgentState
 from crm_agent.config import create_llm
@@ -201,7 +200,7 @@ def _simple_report(state: CRMAgentState) -> str:
 # Build the Graph
 # ═══════════════════════════════════════════════════════════════
 
-def build_graph():
+def build_graph(*, checkpointer=None, store=None):
     """构建 CRM Agent 工作流
 
     Returns:
@@ -224,9 +223,7 @@ def build_graph():
     workflow.add_edge("identify_upsell", "generate_report")
     workflow.add_edge("generate_report", END)
 
-    # 编译
-    checkpointer = MemorySaver()
-    return workflow.compile(checkpointer=checkpointer)
+    return workflow.compile(checkpointer=checkpointer, store=store)
 
 
 # 模块级 graph 实例

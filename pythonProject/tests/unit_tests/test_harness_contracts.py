@@ -34,13 +34,26 @@ def test_run_context_is_json_serializable_and_immutable() -> None:
         context.run_id = "changed"  # type: ignore[misc]
 
 
+def test_run_context_contains_no_connection_secrets() -> None:
+    sensitive_fields = {
+        "password",
+        "api_key",
+        "token",
+        "database_uri",
+        "postgres_uri",
+        "mysql_password",
+    }
+
+    assert sensitive_fields.isdisjoint(RunContext.model_fields)
+
+
 def test_agent_result_is_json_serializable() -> None:
     result = AgentResult(
         status="needs_input",
         handled_by=["profile_agent"],
         required_input=RequiredInput(
             fields=["age", "budget"],
-            prompt="请补充年龄和预算",
+            question="请补充年龄和预算",
             schema={"age": {"type": "integer"}},
         ),
         citations=[Citation(source="mysql:insurance_products", locator="CI001")],

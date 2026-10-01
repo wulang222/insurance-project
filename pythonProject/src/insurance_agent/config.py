@@ -52,12 +52,15 @@ RAG_TOP_K = int(os.getenv("RAG_TOP_K", "3"))         # 每条查询返回的 chu
 RAG_QUERY_COUNT = int(os.getenv("RAG_QUERY_COUNT", "3"))  # 每个产品的查询数（多策略检索）
 
 
-def create_llm(temperature: float | None = None) -> Any:
+def create_llm(
+    temperature: float | None = None,
+    model: str | None = None,
+) -> Any:
     """Create a ChatOpenAI instance configured for DashScope (通义千问)."""
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(
-        model=DEFAULT_MODEL,
+        model=model or DEFAULT_MODEL,
         api_key=DASHSCOPE_API_KEY,
         base_url=DASHSCOPE_BASE_URL,
         temperature=temperature if temperature is not None else LLM_TEMPERATURE,

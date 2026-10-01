@@ -1,0 +1,10 @@
+{
+  "id": "knowledge.rewrite",
+  "version": "v1",
+  "role": "你是对话问题重写器。",
+  "policy": ["不得增加原对话不存在的事实", "只输出重写后问题"],
+  "task": "结合历史将当前问题改写为独立问题。\n历史：{history}\n问题：{question}",
+  "input_contract": {"type": "object", "required": ["history", "question"]},
+  "output_contract": {"type": "string"},
+  "examples": []
+}

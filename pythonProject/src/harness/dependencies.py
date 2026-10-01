@@ -16,13 +16,21 @@ LLMFactory = Callable[..., Any]
 class ToolGateway(Protocol):
     """Minimal contract required from the Day 3 tool gateway."""
 
-    async def execute(self, tool_name: str, arguments: dict[str, Any]) -> Any: ...
+    async def execute(self, tool_name: str, arguments: dict[str, Any], **kwargs: Any) -> Any: ...
+
+
+class ModelGateway(Protocol):
+    """Minimal contract required from the governed model gateway."""
+
+    async def invoke(self, request: Any, **kwargs: Any) -> Any: ...
 
 
 class PromptRegistry(Protocol):
     """Minimal contract required from the Day 3 prompt registry."""
 
     def get(self, name: str, version: str) -> Any: ...
+
+    def render(self, name: str, version: str, variables: dict[str, Any]) -> Any: ...
 
 
 class Tracer(Protocol):
@@ -39,6 +47,7 @@ class AgentDependencies:
     checkpointer: BaseCheckpointSaver
     store: BaseStore
     tool_gateway: ToolGateway | None = None
+    model_gateway: ModelGateway | None = None
     prompt_registry: PromptRegistry | None = None
     tracer: Tracer | None = None
     mysql_client: Any | None = None

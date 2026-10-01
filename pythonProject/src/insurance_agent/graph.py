@@ -16,17 +16,17 @@ import json
 import logging
 from typing import Any, Literal
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
 from langgraph.types import interrupt
 
+from harness.dependencies import AgentDependencies
 from insurance_agent.state import (
     InsuranceAgentState,
     REQUIRED_FIELDS,
     UserProfile,
 )
-from insurance_agent.config import create_llm
 from insurance_agent.prompts import (
-    RECOMMENDATION_SYSTEM_PROMPT,
     MISSING_FIELDS_PROMPT,
 )
 from insurance_agent.tools import (
@@ -35,6 +35,8 @@ from insurance_agent.tools import (
     rag_enrich_products,
     validate_user_profile,
 )
+from middleware.model import ModelCallContext, ModelRequest
+from tools.base import ToolCallContext
 
 logger = logging.getLogger(__name__)
 
@@ -87,12 +89,27 @@ async def load_profile_from_store(
 # Node 1: Extract user profile from conversation
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def extract_profile_node(state: InsuranceAgentState) -> dict:
+async def extract_profile_node(
+    state: InsuranceAgentState,
+    config: RunnableConfig | None = None,
+    *,
+    dependencies: AgentDependencies | None = None,
+) -> dict:
     """Use LLM to extract structured profile from conversation messages."""
     messages = state.get("messages", [])
     conversation = _format_conversation(messages)
 
     stored_profile = state.get("stored_profile", {})
+    if dependencies is not None and dependencies.tool_gateway is not None:
+        result = await dependencies.tool_gateway.execute(
+            "extract_customer_profile",
+            {
+                "conversation": conversation,
+                "stored_profile_json": json.dumps(stored_profile, ensure_ascii=False),
+            },
+            context=ToolCallContext.from_config(config),
+        )
+        return {"user_profile_raw": result.data}
     if stored_profile:
         profile_raw = extract_user_profile.invoke({
             "conversation": conversation,
@@ -108,7 +125,12 @@ async def extract_profile_node(state: InsuranceAgentState) -> dict:
 # 验证pfofile是否缺失关键信息,如果缺失,中断询问用户进行补全
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def validate_profile_node(state: InsuranceAgentState) -> dict:
+async def validate_profile_node(
+    state: InsuranceAgentState,
+    config: RunnableConfig | None = None,
+    *,
+    dependencies: AgentDependencies | None = None,
+) -> dict:
     """Validate extracted profile. If required fields are missing, interrupt
     and ask the user to provide them."""
     profile_raw = state.get("user_profile_raw", {})
@@ -135,7 +157,15 @@ async def validate_profile_node(state: InsuranceAgentState) -> dict:
         # Re-extract profile from the combined conversation + user response
         messages = state.get("messages", [])
         full_conversation = _format_conversation(messages) + f"\n用户补充信息: {user_response}"
-        updated_profile = extract_user_profile.invoke({"conversation": full_conversation})
+        if dependencies is not None and dependencies.tool_gateway is not None:
+            extraction = await dependencies.tool_gateway.execute(
+                "extract_customer_profile",
+                {"conversation": full_conversation, "stored_profile_json": "{}"},
+                context=ToolCallContext.from_config(config),
+            )
+            updated_profile = extraction.data
+        else:
+            updated_profile = extract_user_profile.invoke({"conversation": full_conversation})
 
         # If still missing, interrupt again
         still_missing = validate_user_profile(updated_profile)
@@ -154,8 +184,17 @@ async def validate_profile_node(state: InsuranceAgentState) -> dict:
                 }
             )
             full_conversation += f"\n用户继续补充: {user_response2}"
-            updated_profile = extract_user_profile.invoke({"conversation": full_conversation})
+            if dependencies is not None and dependencies.tool_gateway is not None:
+                extraction = await dependencies.tool_gateway.execute(
+                    "extract_customer_profile",
+                    {"conversation": full_conversation, "stored_profile_json": "{}"},
+                    context=ToolCallContext.from_config(config),
+                )
+                updated_profile = extraction.data
+            else:
+                updated_profile = extract_user_profile.invoke({"conversation": full_conversation})
 
+        profile_raw = updated_profile
         profile = UserProfile(
             age=updated_profile.get("age"),
             occupation=updated_profile.get("occupation"),
@@ -170,8 +209,6 @@ async def validate_profile_node(state: InsuranceAgentState) -> dict:
             insurance_type=profile_raw.get("insurance_type"),
         )
 
-        profile_raw = updated_profile
-
     return {"user_profile": profile, "user_profile_raw": profile_raw}
 
 
@@ -179,7 +216,12 @@ async def validate_profile_node(state: InsuranceAgentState) -> dict:
 # Node 3: MySQL strict query
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def query_products_node(state: InsuranceAgentState) -> dict:
+async def query_products_node(
+    state: InsuranceAgentState,
+    config: RunnableConfig | None = None,
+    *,
+    dependencies: AgentDependencies | None = None,
+) -> dict:
     """Query MySQL for products matching the user profile using strict
     condition filtering (NOT RAG similarity)."""
     profile: UserProfile = state["user_profile"]
@@ -190,9 +232,17 @@ async def query_products_node(state: InsuranceAgentState) -> dict:
         "insurance_type": profile.insurance_type,
     }
 
-    products = query_insurance_products_mysql.invoke(
-        {"profile_json": json.dumps(profile_dict, ensure_ascii=False)}
-    )
+    if dependencies is not None and dependencies.tool_gateway is not None:
+        result = await dependencies.tool_gateway.execute(
+            "search_active_insurance_products",
+            profile_dict,
+            context=ToolCallContext.from_config(config),
+        )
+        products = result.data
+    else:
+        products = query_insurance_products_mysql.invoke(
+            {"profile_json": json.dumps(profile_dict, ensure_ascii=False)}
+        )
     return {"matched_products": products}
 
 
@@ -200,7 +250,12 @@ async def query_products_node(state: InsuranceAgentState) -> dict:
 # Node 4: RAG enrichment
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def enrich_products_node(state: InsuranceAgentState) -> dict:
+async def enrich_products_node(
+    state: InsuranceAgentState,
+    config: RunnableConfig | None = None,
+    *,
+    dependencies: AgentDependencies | None = None,
+) -> dict:
     """Enrich matched products with RAG context (cases, audience info, etc.).
 
     传入完整的产品信息和用户画像，以便 RAG 执行多路检索：
@@ -231,7 +286,33 @@ async def enrich_products_node(state: InsuranceAgentState) -> dict:
             ensure_ascii=False,
         )
 
-    enriched = rag_enrich_products.invoke(invoke_args)
+    if dependencies is not None and dependencies.tool_gateway is not None:
+        evidence_result = await dependencies.tool_gateway.execute(
+            "retrieve_policy_evidence",
+            {
+                "query": (
+                    f"{profile.insurance_type} {profile.age}岁 {profile.occupation} "
+                    "保障范围 理赔规则 免责条款"
+                ),
+                "product_ids": product_ids,
+                "top_k": 10,
+            },
+            context=ToolCallContext.from_config(config),
+        )
+        evidence = evidence_result.data
+        enriched = [
+            {
+                "product_id": product_id,
+                "rag_content": "\n\n".join(
+                    item["content"]
+                    for item in evidence
+                    if not item.get("product_id") or item.get("product_id") == product_id
+                ),
+            }
+            for product_id in product_ids
+        ]
+    else:
+        enriched = rag_enrich_products.invoke(invoke_args)
     rag_map = {e["product_id"]: e["rag_content"] for e in enriched}
     for product in matched_products:
         product["rag_content"] = rag_map.get(product["product_id"], "")
@@ -243,7 +324,12 @@ async def enrich_products_node(state: InsuranceAgentState) -> dict:
 # Node 5: Generate recommendation
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def generate_recommendation_node(state: InsuranceAgentState) -> dict:
+async def generate_recommendation_node(
+    state: InsuranceAgentState,
+    config: RunnableConfig | None = None,
+    *,
+    dependencies: AgentDependencies | None = None,
+) -> dict:
     """Use LLM to generate the final recommendation with reasoning."""
     profile = state["user_profile"]
     products = state.get("enriched_products", state.get("matched_products", []))
@@ -268,17 +354,24 @@ async def generate_recommendation_node(state: InsuranceAgentState) -> dict:
     products_str = _format_products(products)
     rag_context_str = _format_rag_context(products)
 
-    prompt = RECOMMENDATION_SYSTEM_PROMPT.format(
-        user_profile=profile_str,
-        products=products_str,
-        rag_context=rag_context_str,
-    )
-
-    try:
-        llm = create_llm(temperature=0.3)
-        response = llm.invoke(prompt)
-        recommendation = response.content if hasattr(response, "content") else str(response)
-    except Exception:
+    if dependencies is not None and dependencies.model_gateway is not None:
+        try:
+            result = await dependencies.model_gateway.invoke(
+                ModelRequest(
+                    prompt_id="recommendation.generate",
+                    variables={
+                        "user_profile": profile_str,
+                        "products": products_str,
+                        "rag_context": rag_context_str,
+                    },
+                    strategy="recommend",
+                ),
+                context=ModelCallContext.from_config(config),
+            )
+            recommendation = result.data
+        except Exception:
+            recommendation = _fallback_recommendation(profile, products)
+    else:
         recommendation = _fallback_recommendation(profile, products)
 
     return {"final_recommendation": recommendation}
@@ -292,8 +385,10 @@ async def generate_recommendation_node(state: InsuranceAgentState) -> dict:
 
 async def save_profile_to_store(
     state: InsuranceAgentState,
+    config: RunnableConfig | None = None,
     *,
     store: Any = None,
+    dependencies: AgentDependencies | None = None,
 ) -> dict:
     """将用户画像保存到 PostgreSQL Store，实现跨会话持久化。
 
@@ -310,6 +405,29 @@ async def save_profile_to_store(
         return {}
 
     try:
+        if dependencies is not None and dependencies.tool_gateway is not None:
+            await dependencies.tool_gateway.execute(
+                "save_profile_memory",
+                {
+                    "user_id": user_id,
+                    "profile": {
+                        "age": profile.age,
+                        "occupation": profile.occupation,
+                        "budget": profile.budget,
+                        "insurance_type": profile.insurance_type,
+                        "source": state.get("profile_source", "extracted"),
+                    },
+                    "interaction": {
+                        "type": "recommendation",
+                        "agent": "insurance_agent",
+                        "profile": profile_raw,
+                        "product_count": len(state.get("matched_products", [])),
+                        "recommendation_preview": state.get("final_recommendation", "")[:200],
+                    },
+                },
+                context=ToolCallContext.from_config(config),
+            )
+            return {}
         from shared.memory import UserMemoryStore
         memory = UserMemoryStore(store)
 
@@ -364,7 +482,7 @@ def should_query_products(state: InsuranceAgentState) -> Literal["query_products
 # Build the graph（Checkpointer + Store 由应用生命周期注入）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def build_graph(*, checkpointer=None, store=None):
+def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencies | None = None):
     """Build and compile the insurance recommendation agent graph.
 
     Args:
@@ -381,16 +499,54 @@ def build_graph(*, checkpointer=None, store=None):
     async def load_profile_node(state: InsuranceAgentState) -> dict:
         return await load_profile_from_store(state, store=store)
 
-    async def save_profile_node(state: InsuranceAgentState) -> dict:
-        return await save_profile_to_store(state, store=store)
+    async def save_profile_node(
+        state: InsuranceAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        return await save_profile_to_store(
+            state,
+            config,
+            store=store,
+            dependencies=dependencies,
+        )
+
+    async def extract_profile(
+        state: InsuranceAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        return await extract_profile_node(state, config, dependencies=dependencies)
+
+    async def validate_profile(
+        state: InsuranceAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        return await validate_profile_node(state, config, dependencies=dependencies)
+
+    async def query_products(
+        state: InsuranceAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        return await query_products_node(state, config, dependencies=dependencies)
+
+    async def enrich_products(
+        state: InsuranceAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        return await enrich_products_node(state, config, dependencies=dependencies)
+
+    async def generate_recommendation(
+        state: InsuranceAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        return await generate_recommendation_node(state, config, dependencies=dependencies)
 
     # ── 添加节点 ──
     workflow.add_node("load_profile_from_store", load_profile_node)
-    workflow.add_node("extract_profile", extract_profile_node)
-    workflow.add_node("validate_profile", validate_profile_node)
-    workflow.add_node("query_products", query_products_node)
-    workflow.add_node("enrich_products", enrich_products_node)
-    workflow.add_node("generate_recommendation", generate_recommendation_node)
+    workflow.add_node("extract_profile", extract_profile)
+    workflow.add_node("validate_profile", validate_profile)
+    workflow.add_node("query_products", query_products)
+    workflow.add_node("enrich_products", enrich_products)
+    workflow.add_node("generate_recommendation", generate_recommendation)
     workflow.add_node("save_profile_to_store", save_profile_node)
 
     # ── 入口 ──

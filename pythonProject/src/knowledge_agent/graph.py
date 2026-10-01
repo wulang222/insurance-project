@@ -33,10 +33,14 @@
 from __future__ import annotations
 
 import logging
+import json
 from typing import Any, Literal
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
+from pydantic import BaseModel, ConfigDict
 
+from harness.dependencies import AgentDependencies
 from knowledge_agent.state import KnowledgeAgentState
 from knowledge_agent.tools import (
     rewrite_question,
@@ -46,8 +50,17 @@ from knowledge_agent.tools import (
     generate_db_answer,
     generate_rag_answer,
 )
+from middleware.model import ModelCallContext, ModelRequest
+from tools.base import ToolCallContext
+from tools.product_tools import ProductSearchInput
 
 logger = logging.getLogger(__name__)
+
+
+class IntentDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    intent: Literal["db", "rag"]
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Node 0: 从 Store 加载用户上下文
@@ -253,7 +266,7 @@ def route_by_intent(state: KnowledgeAgentState) -> Literal["db_query", "rag_sear
 # 构建并编译工作流图
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def build_graph(*, checkpointer=None, store=None):
+def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencies | None = None):
     """构建知识回答Agent的LangGraph工作流。
 
     节点拓扑：
@@ -272,13 +285,128 @@ def build_graph(*, checkpointer=None, store=None):
     async def save_interaction(state: KnowledgeAgentState) -> dict:
         return await save_interaction_node(state, store=store)
 
+    async def governed_query_rewrite(
+        state: KnowledgeAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        if dependencies is None or dependencies.model_gateway is None:
+            return await query_rewrite_node(state)
+        messages = state.get("messages", [])
+        raw_question = _latest_user_text(messages)
+        history = _format_history(messages[:-1]) if len(messages) > 1 else ""
+        user_context = state.get("user_context", {})
+        if user_context and not user_context.get("is_new_user"):
+            history = f"{json.dumps(user_context, ensure_ascii=False)}\n{history}"
+        try:
+            result = await dependencies.model_gateway.invoke(
+                ModelRequest(
+                    prompt_id="knowledge.rewrite",
+                    variables={"history": history, "question": raw_question},
+                    strategy="extract",
+                ),
+                context=ModelCallContext.from_config(config),
+            )
+            rewritten = result.data
+        except Exception:
+            rewritten = raw_question
+        return {"raw_question": raw_question, "rewritten_question": rewritten}
+
+    async def governed_intent(
+        state: KnowledgeAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        if dependencies is None or dependencies.model_gateway is None:
+            return await intent_recognition_node(state)
+        question = state.get("rewritten_question", "") or state.get("raw_question", "")
+        try:
+            result = await dependencies.model_gateway.invoke(
+                ModelRequest(
+                    prompt_id="knowledge.intent",
+                    variables={"question": question},
+                    strategy="classify",
+                    response_model=IntentDecision,
+                ),
+                context=ModelCallContext.from_config(config),
+            )
+            return {"intent": result.data.intent}
+        except Exception:
+            return {"intent": "rag"}
+
+    async def governed_db_query(
+        state: KnowledgeAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        if (
+            dependencies is None
+            or dependencies.model_gateway is None
+            or dependencies.tool_gateway is None
+        ):
+            return await db_query_node(state)
+        question = state.get("rewritten_question", "")
+        parsed = await dependencies.model_gateway.invoke(
+            ModelRequest(
+                prompt_id="knowledge.query",
+                variables={"question": question},
+                strategy="extract",
+                response_model=ProductSearchInput,
+            ),
+            context=ModelCallContext.from_config(config),
+        )
+        result = await dependencies.tool_gateway.execute(
+            "search_active_insurance_products",
+            parsed.data.model_dump(exclude_none=True),
+            context=ToolCallContext.from_config(config),
+        )
+        return {"db_results": result.data}
+
+    async def governed_rag_search(
+        state: KnowledgeAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        if dependencies is None or dependencies.tool_gateway is None:
+            return await rag_search_node(state)
+        result = await dependencies.tool_gateway.execute(
+            "retrieve_policy_evidence",
+            {
+                "query": state.get("rewritten_question", ""),
+                "product_ids": [],
+                "top_k": 10,
+            },
+            context=ToolCallContext.from_config(config),
+        )
+        return {"rag_docs": result.data}
+
+    async def governed_answer(
+        state: KnowledgeAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        if dependencies is None or dependencies.model_gateway is None:
+            return await generate_answer_node(state)
+        question = state.get("rewritten_question", "") or state.get("raw_question", "")
+        evidence = state.get("db_results", []) if state.get("intent") == "db" else state.get("rag_docs", [])
+        if not evidence:
+            return {"final_answer": "当前没有检索到可验证的资料，暂时无法给出可靠结论。"}
+        result = await dependencies.model_gateway.invoke(
+            ModelRequest(
+                prompt_id="knowledge.answer",
+                variables={
+                    "question": question,
+                    "intent": state.get("intent", "rag"),
+                    "evidence": json.dumps(evidence, ensure_ascii=False),
+                },
+                strategy="aggregate",
+            ),
+            context=ModelCallContext.from_config(config),
+        )
+        return {"final_answer": result.data}
+
     # ── 注册所有节点 ──
     workflow.add_node("load_user_context", load_context)
-    workflow.add_node("query_rewrite", query_rewrite_node)
-    workflow.add_node("intent_recognition", intent_recognition_node)
-    workflow.add_node("db_query", db_query_node)
-    workflow.add_node("rag_search", rag_search_node)
-    workflow.add_node("generate_answer", generate_answer_node)
+    workflow.add_node("query_rewrite", governed_query_rewrite)
+    workflow.add_node("intent_recognition", governed_intent)
+    workflow.add_node("db_query", governed_db_query)
+    workflow.add_node("rag_search", governed_rag_search)
+    workflow.add_node("generate_answer", governed_answer)
     workflow.add_node("save_interaction", save_interaction)
 
     # ── 入口 ──
@@ -330,3 +458,13 @@ def _format_history(messages: list) -> str:
         role_label = "用户" if role in ("human", "user") else ("助手" if role in ("ai", "assistant") else role)
         lines.append(f"{role_label}: {content}")
     return "\n".join(lines)
+
+
+def _latest_user_text(messages: list) -> str:
+    for message in reversed(messages):
+        if isinstance(message, dict):
+            if message.get("role", message.get("type")) in ("user", "human"):
+                return str(message.get("content", ""))
+        elif getattr(message, "type", "") == "human":
+            return str(getattr(message, "content", ""))
+    return ""

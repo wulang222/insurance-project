@@ -1,17 +1,19 @@
 """Supervisor graph that routes requests to existing child agents."""
 
-import json
 import logging
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 from langgraph.types import Command, interrupt
+from pydantic import BaseModel, ConfigDict
 
 from crm_agent.graph import build_graph as build_crm_graph
-from insurance_agent.config import create_llm
+from harness.dependencies import AgentDependencies
+from insurance_agent.config import create_llm as create_llm  # backward-compatible test seam
 from insurance_agent.graph import build_graph as build_insurance_graph
 from knowledge_agent.graph import build_graph as build_knowledge_graph
+from middleware.model import ModelCallContext, ModelRequest
 from supervisor_agent.state import AgentRoute, SupervisorAgentState
 logger = logging.getLogger(__name__)
 
@@ -73,23 +75,11 @@ def _describe_child_result(result: dict, child_name: str) -> str:
     return f"{child_name} 已完成分析。"
 
 
-def _parse_json_object(content: str) -> dict:
-    text = content.strip()
-    # 去掉 markdown 代码块
-    if text.startswith("```"):
-        text = text.strip("`")
-        if text.startswith("json"):
-            text = text[4:].strip()
-    # 去掉 markdown 粗体标记（偶尔 LLM 用 **insurance_agent**）
-    text = text.replace("**", "")
-    start = text.find("{")
-    end = text.rfind("}")
-    if start >= 0 and end >= start:
-        text = text[start:end + 1]
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return {}
+class RouteDecision(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    route: AgentRoute
+    reason: str
 
 
 def _child_input(state: SupervisorAgentState) -> dict:
@@ -104,11 +94,10 @@ def _child_config(config: RunnableConfig | None, child_name: str) -> RunnableCon
     parent_thread_id = parent_config.get("thread_id", "default")
     child_config: RunnableConfig = {
         "configurable": {
+            **parent_config,
             "thread_id": f"{parent_thread_id}:{child_name}",
         }
     }
-    if parent_config.get("user_id"):
-        child_config["configurable"]["user_id"] = parent_config["user_id"]
     return child_config
 
 
@@ -158,16 +147,28 @@ def _extract_message_reply(result: dict) -> str:
     return str(content)
 
 
-def _get_insurance_graph(*, checkpointer=None, store=None):
-    return build_insurance_graph(checkpointer=checkpointer, store=store)
+def _get_insurance_graph(*, checkpointer=None, store=None, dependencies=None):
+    return build_insurance_graph(
+        checkpointer=checkpointer,
+        store=store,
+        dependencies=dependencies,
+    )
 
 
-def _get_knowledge_graph(*, checkpointer=None, store=None):
-    return build_knowledge_graph(checkpointer=checkpointer, store=store)
+def _get_knowledge_graph(*, checkpointer=None, store=None, dependencies=None):
+    return build_knowledge_graph(
+        checkpointer=checkpointer,
+        store=store,
+        dependencies=dependencies,
+    )
 
 
-def _get_crm_graph(*, checkpointer=None, store=None):
-    return build_crm_graph(checkpointer=checkpointer, store=store)
+def _get_crm_graph(*, checkpointer=None, store=None, dependencies=None):
+    return build_crm_graph(
+        checkpointer=checkpointer,
+        store=store,
+        dependencies=dependencies,
+    )
 
 
 # ─── ROUTE_PROMPT ───────────────────────────────────────────
@@ -200,21 +201,35 @@ async def route_request_node(state: SupervisorAgentState) -> dict:
     if route is None:
         route = "knowledge_agent"
         reason = "defaulted to knowledge_agent"
-        try:
-            llm = create_llm(temperature=0)
-            response = llm.invoke(ROUTE_PROMPT.format(question=question))
-            content = response.content if hasattr(response, "content") else str(response)
-            parsed = _parse_json_object(content)
-            llm_route = parsed.get("route", "")
-            # 清理可能的空白和特殊字符
-            llm_route = str(llm_route).strip().strip('"').strip("'")
-            if llm_route in ("insurance_agent", "knowledge_agent", "crm_agent"):
-                route = llm_route
-                reason = str(parsed.get("reason", "classified by LLM"))
-        except Exception:
-            pass  # 规则路由已经覆盖了主要场景，LLM 失败静默处理
 
     return {"route": route, "route_reason": reason}
+
+
+async def _governed_route_request_node(
+    state: SupervisorAgentState,
+    config: RunnableConfig | None,
+    dependencies: AgentDependencies,
+) -> dict:
+    question = _latest_user_text(state.get("messages", []))
+    route = _rule_route(question)
+    if route is not None:
+        return {"route": route, "route_reason": "matched local routing rules"}
+    if dependencies.model_gateway is None:
+        return await route_request_node(state)
+    try:
+        result = await dependencies.model_gateway.invoke(
+            ModelRequest(
+                prompt_id="supervisor.route",
+                variables={"question": question},
+                strategy="route",
+                response_model=RouteDecision,
+            ),
+            context=ModelCallContext.from_config(config),
+        )
+        decision: RouteDecision = result.data
+        return {"route": decision.route, "route_reason": decision.reason}
+    except Exception:
+        return {"route": "knowledge_agent", "route_reason": "safe routing fallback"}
 
 
 async def call_insurance_agent_node(
@@ -298,11 +313,31 @@ def _describe_child_result(result: dict, child_name: str) -> str:
 
 # ─── build ──────────────────────────────────────────────────
 
-def build_graph(*, checkpointer=None, store=None):
+def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencies | None = None):
     workflow = StateGraph(SupervisorAgentState)
-    insurance_graph = _get_insurance_graph(checkpointer=checkpointer, store=store)
-    knowledge_graph = _get_knowledge_graph(checkpointer=checkpointer, store=store)
-    crm_graph = _get_crm_graph(checkpointer=checkpointer, store=store)
+    insurance_graph = _get_insurance_graph(
+        checkpointer=checkpointer,
+        store=store,
+        dependencies=dependencies,
+    )
+    knowledge_graph = _get_knowledge_graph(
+        checkpointer=checkpointer,
+        store=store,
+        dependencies=dependencies,
+    )
+    crm_graph = _get_crm_graph(
+        checkpointer=checkpointer,
+        store=store,
+        dependencies=dependencies,
+    )
+
+    async def route_request(
+        state: SupervisorAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        if dependencies is None:
+            return await route_request_node(state)
+        return await _governed_route_request_node(state, config, dependencies)
 
     async def call_insurance(
         state: SupervisorAgentState,
@@ -322,7 +357,7 @@ def build_graph(*, checkpointer=None, store=None):
     ) -> dict:
         return await call_crm_agent_node(state, config, graph=crm_graph)
 
-    workflow.add_node("route_request", route_request_node)
+    workflow.add_node("route_request", route_request)
     workflow.add_node("call_insurance_agent", call_insurance)
     workflow.add_node("call_knowledge_agent", call_knowledge)
     workflow.add_node("call_crm_agent", call_crm)

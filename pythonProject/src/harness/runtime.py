@@ -153,6 +153,14 @@ class RunManager:
                 "thread_id": record.context.thread_id,
                 "run_id": record.context.run_id,
                 "request_id": record.context.request_id,
+                "scopes": [
+                    "insurance:read",
+                    "knowledge:read",
+                    "crm:read",
+                    "memory:write",
+                ],
+                "max_tool_calls": 20,
+                "max_model_calls": 12,
             }
         }
         if record.context.user_id:

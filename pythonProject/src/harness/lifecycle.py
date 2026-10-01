@@ -15,7 +15,15 @@ from infrastructure.milvus import MilvusClient
 from infrastructure.mysql import MySQLClient
 from infrastructure.postgres import PostgresResources, open_postgres_resources
 from insurance_agent.config import create_llm
+from middleware.model import ModelGateway
+from middleware.tool import ToolGateway
+from prompts.registry import PromptRegistry
 from supervisor_agent.graph import build_graph as build_supervisor_graph
+from tools.crm_tools import FakeCustomerRepository
+from tools.memory_tools import ProfileMemoryRepository
+from tools.policy_tools import MilvusPolicyEvidenceRepository
+from tools.product_tools import MySQLProductRepository
+from tools.registry import build_tool_registry
 
 
 PostgresFactory = Callable[[], AbstractAsyncContextManager[PostgresResources]]
@@ -35,16 +43,30 @@ def build_lifespan(
         async with postgres_factory() as postgres:
             mysql_client = mysql_factory()
             milvus_client = milvus_factory()
+            prompt_registry = PromptRegistry.default()
+            model_gateway = ModelGateway(create_llm, prompt_registry)
+            tool_registry = build_tool_registry(
+                model_gateway=model_gateway,
+                product_repository=MySQLProductRepository(mysql_client),
+                evidence_repository=MilvusPolicyEvidenceRepository(milvus_client),
+                customer_repository=FakeCustomerRepository(),
+                memory_repository=ProfileMemoryRepository(postgres.store),
+            )
+            tool_gateway = ToolGateway(tool_registry)
             dependencies = AgentDependencies(
                 llm_factory=create_llm,
                 checkpointer=postgres.checkpointer,
                 store=postgres.store,
+                tool_gateway=tool_gateway,
+                model_gateway=model_gateway,
+                prompt_registry=prompt_registry,
                 mysql_client=mysql_client,
                 milvus_client=milvus_client,
             )
             graph = graph_factory(
                 checkpointer=postgres.checkpointer,
                 store=postgres.store,
+                dependencies=dependencies,
             )
             runtime = RunManager(
                 graph,

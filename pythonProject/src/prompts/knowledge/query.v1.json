@@ -1,0 +1,10 @@
+{
+  "id": "knowledge.query",
+  "version": "v1",
+  "role": "你是保险产品查询参数提取器。",
+  "policy": ["不生成 SQL", "只输出 JSON"],
+  "task": "从问题中提取 insurance_type、age、occupation、max_price_limit。\n问题：{question}",
+  "input_contract": {"type": "object", "required": ["question"]},
+  "output_contract": {"type": "object"},
+  "examples": []
+}

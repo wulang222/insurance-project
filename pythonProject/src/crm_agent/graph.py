@@ -16,8 +16,10 @@ from __future__ import annotations
 import json
 import logging
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
 
+from harness.dependencies import AgentDependencies
 from crm_agent.state import CRMAgentState
 from crm_agent.config import create_llm
 from crm_agent.prompts import CRM_REPORT_PROMPT
@@ -27,6 +29,7 @@ from crm_agent.tools import (
     predict_churn_risk,
     identify_upsell_opportunities,
 )
+from tools.base import ToolCallContext
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +203,7 @@ def _simple_report(state: CRMAgentState) -> str:
 # Build the Graph
 # ═══════════════════════════════════════════════════════════════
 
-def build_graph(*, checkpointer=None, store=None):
+def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencies | None = None):
     """构建 CRM Agent 工作流
 
     Returns:
@@ -208,12 +211,77 @@ def build_graph(*, checkpointer=None, store=None):
     """
     workflow = StateGraph(CRMAgentState)
 
+    async def governed_load_customer(
+        state: CRMAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        if dependencies is None or dependencies.tool_gateway is None:
+            return await load_customer_node(state)
+        user_id = state.get("user_id") or "default_user"
+        result = await dependencies.tool_gateway.execute(
+            "get_customer_policy_portfolio",
+            {"user_id": user_id},
+            context=ToolCallContext.from_config(config),
+        )
+        data = result.data
+        return {
+            "user_id": user_id,
+            "customer_profile": data.get("profile", {}),
+            "policies": data.get("policies", []),
+            "interaction_history": data.get("interactions", []),
+        }
+
+    async def governed_sentiment(state: CRMAgentState) -> dict:
+        if dependencies is None:
+            return await sentiment_node(state)
+        labels = [
+            item.get("sentiment_label", "neutral")
+            for item in state.get("interaction_history", [])
+        ]
+        summary = "偏向负面" if labels.count("negative") > labels.count("positive") else "中性或正面"
+        return {"sentiment_summary": json.dumps({"overall_sentiment": summary}, ensure_ascii=False)}
+
+    async def governed_churn(state: CRMAgentState) -> dict:
+        if dependencies is None:
+            return await churn_node(state)
+        expired = [item for item in state.get("policies", []) if item.get("status") == "expired"]
+        expiring = [item for item in state.get("policies", []) if item.get("status") == "expiring_soon"]
+        score = min(100, len(expired) * 25 + len(expiring) * 15)
+        return {
+            "churn_risk": score,
+            "churn_reason": json.dumps(["存在失效或临期保单"] if score else [], ensure_ascii=False),
+            "key_time_nodes": [],
+        }
+
+    async def governed_upsell(
+        state: CRMAgentState,
+        config: RunnableConfig | None = None,
+    ) -> dict:
+        if dependencies is None or dependencies.tool_gateway is None:
+            return await upsell_node(state)
+        result = await dependencies.tool_gateway.execute(
+            "calculate_coverage_gap",
+            {"portfolio": state.get("policies", [])},
+            context=ToolCallContext.from_config(config),
+        )
+        return {
+            "upsell_opportunities": [
+                {"priority": "medium", "product_type": item, "reason": "现有保障缺少该险种"}
+                for item in result.data["missing_types"]
+            ]
+        }
+
+    async def governed_report(state: CRMAgentState) -> dict:
+        if dependencies is None:
+            return await generate_report_node(state)
+        return {"crm_report": _simple_report(state)}
+
     # 添加节点
-    workflow.add_node("load_customer", load_customer_node)
-    workflow.add_node("analyze_sentiment", sentiment_node)
-    workflow.add_node("predict_churn", churn_node)
-    workflow.add_node("identify_upsell", upsell_node)
-    workflow.add_node("generate_report", generate_report_node)
+    workflow.add_node("load_customer", governed_load_customer)
+    workflow.add_node("analyze_sentiment", governed_sentiment)
+    workflow.add_node("predict_churn", governed_churn)
+    workflow.add_node("identify_upsell", governed_upsell)
+    workflow.add_node("generate_report", governed_report)
 
     # 线性流程
     workflow.set_entry_point("load_customer")

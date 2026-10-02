@@ -7,7 +7,12 @@ from typing import Annotated, Any, Literal, TypedDict
 from langgraph.graph.message import add_messages
 
 
-AgentRoute = Literal["insurance_agent", "knowledge_agent", "crm_agent"]
+AgentRoute = Literal[
+    "insurance_agent",
+    "knowledge_agent",
+    "crm_agent",
+    "family_plan",
+]
 
 
 class SupervisorAgentState(TypedDict, total=False):
@@ -19,5 +24,5 @@ class SupervisorAgentState(TypedDict, total=False):
     route_reason: str
     child_result: dict[str, Any]
     final_answer: str
-    handled_by: str
-
+    handled_by: str | list[str]
+    warnings: list[str]

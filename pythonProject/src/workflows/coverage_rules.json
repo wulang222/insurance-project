@@ -1,0 +1,34 @@
+{
+  "version": "v1",
+  "disclaimer": "以下缺口依据演示规则计算，不构成核保结论或正式保险建议。",
+  "rules": [
+    {
+      "category": "critical_illness",
+      "insurance_type": "重疾险",
+      "recommended_coverage": 500000,
+      "priority": "high",
+      "rationale": "演示规则以50万元作为重大疾病收入损失与康复支出的基础参考。"
+    },
+    {
+      "category": "medical",
+      "insurance_type": "医疗险",
+      "recommended_coverage": 2000000,
+      "priority": "high",
+      "rationale": "演示规则以200万元作为大额住院医疗费用的基础参考。"
+    },
+    {
+      "category": "accident",
+      "insurance_type": "意外险",
+      "recommended_coverage": 1000000,
+      "priority": "medium",
+      "rationale": "演示规则以100万元作为意外身故及伤残责任的基础参考。"
+    },
+    {
+      "category": "life",
+      "insurance_type": "寿险",
+      "recommended_coverage": 1000000,
+      "priority": "medium",
+      "rationale": "演示规则以100万元作为家庭责任期身故保障的基础参考。"
+    }
+  ]
+}

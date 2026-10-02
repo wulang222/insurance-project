@@ -10,6 +10,7 @@ from typing import Any, AsyncIterator
 from fastapi import FastAPI
 
 from harness.dependencies import AgentDependencies
+from harness.registry import build_agent_registry
 from harness.runtime import RunManager
 from infrastructure.milvus import MilvusClient
 from infrastructure.mysql import MySQLClient
@@ -53,6 +54,7 @@ def build_lifespan(
                 memory_repository=ProfileMemoryRepository(postgres.store),
             )
             tool_gateway = ToolGateway(tool_registry)
+            specialist_registry = build_agent_registry(set(tool_registry.names()))
             dependencies = AgentDependencies(
                 llm_factory=create_llm,
                 checkpointer=postgres.checkpointer,
@@ -60,6 +62,7 @@ def build_lifespan(
                 tool_gateway=tool_gateway,
                 model_gateway=model_gateway,
                 prompt_registry=prompt_registry,
+                agent_registry=specialist_registry,
                 mysql_client=mysql_client,
                 milvus_client=milvus_client,
             )

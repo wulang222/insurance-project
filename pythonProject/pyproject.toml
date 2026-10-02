@@ -92,5 +92,13 @@ include = ["**/*.py"]
 from = "src/prompts"
 include = ["**/*.py", "**/*.json"]
 
+[[tool.uv.build-backend.packages]]
+from = "src/agents"
+include = ["**/*.py"]
+
+[[tool.uv.build-backend.packages]]
+from = "src/workflows"
+include = ["**/*.py", "**/*.json"]
+
 [tool.ruff]
 target-version = "py313"

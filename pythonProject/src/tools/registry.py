@@ -15,7 +15,13 @@ from tools.crm_tools import (
     CustomerPortfolioInput,
     CustomerRepository,
 )
-from tools.memory_tools import ProfileMemoryRepository, SaveProfileInput, SaveProfileResult
+from tools.memory_tools import (
+    LoadProfileInput,
+    LoadProfileResult,
+    ProfileMemoryRepository,
+    SaveProfileInput,
+    SaveProfileResult,
+)
 from tools.policy_tools import (
     CoverageGapInput,
     CoverageGapResult,
@@ -133,6 +139,9 @@ def build_tool_registry(
     ) -> SaveProfileResult:
         return await memory_repository.save(user_id, profile, interaction)
 
+    async def get_profile_memory(user_id: str) -> LoadProfileResult:
+        return await memory_repository.load(user_id)
+
     return ToolRegistry(
         [
             ToolDefinition(
@@ -218,6 +227,20 @@ def build_tool_registry(
                 CoverageGapInput,
                 CoverageGapResult,
                 calculate_coverage_gap,
+            ),
+            ToolDefinition(
+                ToolSpec(
+                    name="get_profile_memory",
+                    version="1.0.0",
+                    description="Read the current persisted customer profile.",
+                    risk_level="read",
+                    idempotent=True,
+                    timeout_seconds=5,
+                    required_scopes=["memory:read"],
+                ),
+                LoadProfileInput,
+                LoadProfileResult,
+                get_profile_memory,
             ),
             ToolDefinition(
                 ToolSpec(

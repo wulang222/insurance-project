@@ -39,6 +39,12 @@ class Tracer(Protocol):
     def start_span(self, name: str, **attributes: Any) -> Any: ...
 
 
+class AgentRegistry(Protocol):
+    """Specialist definitions and tool allowlist boundary."""
+
+    def get(self, name: str) -> Any: ...
+
+
 @dataclass(frozen=True, slots=True)
 class AgentDependencies:
     """Initialized runtime dependencies passed explicitly to agents."""
@@ -49,6 +55,7 @@ class AgentDependencies:
     tool_gateway: ToolGateway | None = None
     model_gateway: ModelGateway | None = None
     prompt_registry: PromptRegistry | None = None
+    agent_registry: AgentRegistry | None = None
     tracer: Tracer | None = None
     mysql_client: Any | None = None
     milvus_client: Any | None = None

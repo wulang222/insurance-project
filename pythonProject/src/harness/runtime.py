@@ -157,6 +157,7 @@ class RunManager:
                     "insurance:read",
                     "knowledge:read",
                     "crm:read",
+                    "memory:read",
                     "memory:write",
                 ],
                 "max_tool_calls": record.context.max_tool_calls,
@@ -224,6 +225,22 @@ class RunManager:
             for key in ("route", "route_reason")
             if key in data
         }
+        child_result = data.get("child_result")
+        if data.get("route") == "family_plan" and isinstance(child_result, dict):
+            structured_data["family_plan"] = {
+                key: child_result[key]
+                for key in (
+                    "plan",
+                    "profile",
+                    "coverage_gaps",
+                    "products",
+                    "evidence",
+                    "disclaimer",
+                    "compliance",
+                    "agent_trace",
+                )
+                if key in child_result
+            }
         citations = [Citation.model_validate(item) for item in data.get("citations", [])]
         return AgentResult(
             status="completed",

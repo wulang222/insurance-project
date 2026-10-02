@@ -14,6 +14,7 @@ from supervisor_agent.graph import route_request_node
         ("28 岁程序员预算 5000 想买重疾险", "insurance_agent"),
         ("等待期是什么意思", "knowledge_agent"),
         ("分析客户流失与续保风险", "crm_agent"),
+        ("帮我们一家人做家庭保障规划", "family_plan"),
         ("你好", "knowledge_agent"),
     ],
 )

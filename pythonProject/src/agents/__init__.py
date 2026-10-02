@@ -1,0 +1,1 @@
+"""Composable specialist agent contracts."""

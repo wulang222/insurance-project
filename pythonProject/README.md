@@ -78,6 +78,20 @@ uv run python -m pytest \
 `PromptRegistry`。模块级 graph 仅保留给 LangGraph 本地开发与旧测试适配，不能作为
 正式 HTTP 运行入口。Fake Repository 只能在测试或显式开发配置中创建。
 
+Day 4 组合式家庭保障规划验收：
+
+```bash
+uv run python -m pytest \
+  tests/contract/test_agent_registry.py \
+  tests/integration/test_family_plan_graph.py \
+  tests/integration/test_parallel_agents.py -q
+```
+
+包含“家庭保障/全家保险/家庭方案”等意图的请求会进入固定可解释计划：画像与
+CRM 并行，保障缺口计算完成后产品查询与条款检索并行，最后聚合并执行合规检查。
+保障缺口使用 `src/workflows/coverage_rules.json` 中的演示规则，不构成核保结论或
+正式保险建议。
+
 Contract 测试会 mock LLM、MySQL 和 Milvus，不依赖外部服务。需要显式运行供应商集成测试时，设置 `RUN_EXTERNAL_INTEGRATION_TESTS=true`。
 
 ## 目录入口
@@ -91,6 +105,8 @@ Contract 测试会 mock LLM、MySQL 和 Milvus，不依赖外部服务。需要�
 - `src/middleware/`：模型与工具的超时、重试、预算、权限、脱敏和审计
 - `src/tools/`：Pydantic 工具契约与显式 Repository 适配器
 - `src/prompts/`：可版本化、可哈希、可回归的 Prompt Registry
+- `src/agents/`：专业 Agent 的结构化输入输出契约
+- `src/workflows/`：组合式家庭保障规划与配置化保障缺口规则
 - `src/vectorizer/`：文档向量化到 Milvus
 
 `simple_agent` 仅作为早期示例保留，不是项目主入口；`langchain-anthropic` 也仅由该示例使用。

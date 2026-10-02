@@ -52,6 +52,7 @@ def test_fastapi_lifespan_creates_and_releases_resources() -> None:
         assert app.state.dependencies.prompt_registry is not None
         assert app.state.dependencies.model_gateway is not None
         assert app.state.dependencies.tool_gateway is not None
+        assert app.state.dependencies.agent_registry is not None
 
     assert mysql_client.closed is True
     assert milvus_client.closed is True

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import PurePath
 from typing import Any, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from harness.errors import DependencyUnavailableError
 from tools.product_tools import Product
@@ -55,10 +57,62 @@ class EvidenceInput(BaseModel):
 
 
 class Evidence(BaseModel):
-    content: str
-    source: str = ""
+    """A retrieval result with enough metadata to audit every citation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    content: str = Field(min_length=1)
     score: float = 0
+    document_id: str = Field(min_length=1)
     product_id: str | None = None
+    document_type: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    section: str | None = None
+    page: int | None = Field(default=None, ge=1)
+    effective_date: str | None = None
+    version: str = Field(min_length=1)
+    source_path: str = Field(min_length=1)
+    checksum: str = Field(min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_hit(cls, value: Any) -> Any:
+        """Normalize historical Milvus hits while always emitting the Day 5 schema."""
+
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        metadata = data.pop("metadata", {}) or {}
+        if isinstance(metadata, str):
+            import json
+
+            try:
+                metadata = json.loads(metadata)
+            except json.JSONDecodeError:
+                metadata = {}
+        merged = {**metadata, **data}
+        content = str(merged.get("content") or merged.get("text") or "").strip()
+        source_path = str(
+            merged.get("source_path") or merged.get("source") or merged.get("file_path") or "unknown"
+        )
+        checksum = str(
+            merged.get("checksum")
+            or hashlib.sha256(content.encode("utf-8")).hexdigest()
+        )
+        suffix = PurePath(source_path).suffix.lstrip(".")
+        merged.update(
+            {
+                "content": content,
+                "document_id": str(merged.get("document_id") or f"doc-{checksum[:16]}"),
+                "document_type": str(merged.get("document_type") or suffix or "unknown"),
+                "title": str(merged.get("title") or PurePath(source_path).name or "未命名文档"),
+                "version": str(merged.get("version") or merged.get("source_version") or "unknown"),
+                "source_path": source_path,
+                "checksum": checksum,
+            }
+        )
+        allowed = cls.model_fields
+        return {key: item for key, item in merged.items() if key in allowed}
 
 
 class PolicyEvidenceRepository(Protocol):
@@ -96,12 +150,15 @@ class MilvusPolicyEvidenceRepository:
             if product_ids and product_id and product_id not in product_ids:
                 continue
             evidence.append(
-                {
-                    "content": str(hit.get("text", "")),
-                    "source": str(hit.get("file_path", "")),
-                    "score": float(hit.get("score", 0)),
-                    "product_id": product_id,
-                }
+                Evidence.model_validate(
+                    {
+                        "content": str(hit.get("text", "")),
+                        "score": float(hit.get("score", 0)),
+                        "source_path": str(hit.get("file_path", "")),
+                        "metadata": metadata,
+                        "product_id": product_id,
+                    }
+                ).model_dump(mode="json")
             )
         return evidence
 
@@ -145,12 +202,15 @@ class MilvusPolicyEvidenceRepository:
                 if product_ids and product_id and product_id not in product_ids:
                     continue
                 evidence.append(
-                    {
-                        "content": str(hit.entity.get("text", "")),
-                        "source": str(hit.entity.get("file_path", "")),
-                        "score": float(hit.score),
-                        "product_id": product_id,
-                    }
+                    Evidence.model_validate(
+                        {
+                            "content": str(hit.entity.get("text", "")),
+                            "score": float(hit.score),
+                            "source_path": str(hit.entity.get("file_path", "")),
+                            "metadata": metadata,
+                            "product_id": product_id,
+                        }
+                    ).model_dump(mode="json")
                 )
             return evidence
         except DependencyUnavailableError:
@@ -165,7 +225,11 @@ class MilvusPolicyEvidenceRepository:
 
 class FakePolicyEvidenceRepository:
     def __init__(self, evidence: list[dict[str, Any]]) -> None:
-        self.evidence = evidence
+        normalized = [Evidence.model_validate(item) for item in evidence]
+        invalid = [item.source_path for item in normalized if not item.source_path.startswith("fixture://")]
+        if invalid:
+            raise ValueError("development evidence must use fixture:// source paths")
+        self.evidence = [item.model_dump(mode="json") for item in normalized]
 
     def search(self, query: str, *, product_ids: list[str], top_k: int) -> list[dict[str, Any]]:
         del query

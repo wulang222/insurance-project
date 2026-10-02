@@ -74,9 +74,17 @@ class FamilyToolGateway:
             "retrieve_policy_evidence": [
                 {
                     "content": "测试条款证据",
-                    "source": "policy.pdf",
+                    "source_path": "fixture://policy.pdf",
                     "score": 0.9,
                     "product_id": "CI001",
+                    "document_id": "DOC-CI001",
+                    "document_type": "policy_terms",
+                    "title": "测试重疾险条款",
+                    "section": "保障责任",
+                    "page": 3,
+                    "effective_date": "2026-01-01",
+                    "version": "v1",
+                    "checksum": "fixture-ci001-v1",
                 }
             ],
         }[tool_name]
@@ -137,7 +145,7 @@ async def test_complete_profile_with_existing_medical_policy() -> None:
     medical = next(item for item in result["coverage_gaps"] if item["category"] == "medical")
     assert medical["current_coverage"] == 2_000_000
     assert medical["gap"] == 0
-    assert result["compliance"]["approved"] is True
+    assert result["compliance"]["passed"] is True
     assert len(result["handled_by"]) == 6
 
 

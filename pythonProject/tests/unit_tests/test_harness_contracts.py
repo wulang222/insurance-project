@@ -56,13 +56,25 @@ def test_agent_result_is_json_serializable() -> None:
             question="请补充年龄和预算",
             schema={"age": {"type": "integer"}},
         ),
-        citations=[Citation(source="mysql:insurance_products", locator="CI001")],
+        citations=[
+            Citation(
+                citation_id="CIT-001",
+                claim="等待期为90天",
+                document_id="DOC-001",
+                title="测试保险条款",
+                section="等待期",
+                page=3,
+                excerpt="本产品等待期为90天。",
+                score=0.91,
+                source_version="v1",
+            )
+        ],
     )
 
     payload = json.loads(result.model_dump_json(by_alias=True))
     assert payload["status"] == "needs_input"
     assert payload["required_input"]["schema"]["age"]["type"] == "integer"
-    assert payload["citations"][0]["source"] == "mysql:insurance_products"
+    assert payload["citations"][0]["citation_id"] == "CIT-001"
 
 
 def test_tool_result_is_json_serializable() -> None:

@@ -100,5 +100,9 @@ include = ["**/*.py"]
 from = "src/workflows"
 include = ["**/*.py", "**/*.json"]
 
+[[tool.uv.build-backend.packages]]
+from = "src/safety"
+include = ["**/*.py"]
+
 [tool.ruff]
 target-version = "py313"

@@ -236,12 +236,16 @@ class RunManager:
                     "products",
                     "evidence",
                     "disclaimer",
+                    "recommendation_draft",
                     "compliance",
                     "agent_trace",
                 )
                 if key in child_result
             }
-        citations = [Citation.model_validate(item) for item in data.get("citations", [])]
+        citation_data = data.get("citations", [])
+        if not citation_data and isinstance(child_result, dict):
+            citation_data = child_result.get("citations", [])
+        citations = [Citation.model_validate(item) for item in citation_data]
         return AgentResult(
             status="completed",
             answer=str(answer or ""),

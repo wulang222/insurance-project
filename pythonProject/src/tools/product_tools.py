@@ -32,6 +32,7 @@ class Product(BaseModel):
     max_price: float | None = None
     target_occupations: str = ""
     description: str = ""
+    is_active: bool = True
 
 
 class ProductRepository(Protocol):
@@ -74,7 +75,7 @@ class MySQLProductRepository:
             params.append(query.limit)
             sql = (
                 "SELECT product_id, product_name, insurance_type, min_age, max_age, "
-                "min_price, max_price, target_occupations, description "
+                "min_price, max_price, target_occupations, description, is_active "
                 f"FROM insurance_products WHERE {' AND '.join(conditions)} "
                 "ORDER BY min_price ASC LIMIT %s"
             )

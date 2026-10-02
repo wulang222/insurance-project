@@ -123,6 +123,7 @@ def _child_output(result: dict, child_name: str, answer_key: str) -> dict:
         "final_answer": answer or str(result),
         "handled_by": result.get("handled_by") or child_name,
         "warnings": result.get("warnings", []),
+        "citations": result.get("citations", []),
     }
 
 

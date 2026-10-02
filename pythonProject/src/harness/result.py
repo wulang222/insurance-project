@@ -10,14 +10,17 @@ from pydantic import BaseModel, ConfigDict, Field
 class Citation(BaseModel):
     """Evidence supporting one or more factual claims in an answer."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-    source: str = Field(min_length=1)
+    citation_id: str = Field(min_length=1)
+    claim: str = Field(min_length=1)
+    document_id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    section: str | None = None
+    page: int | None = Field(default=None, ge=1)
+    excerpt: str = Field(min_length=1)
+    score: float | None = None
     source_version: str | None = None
-    title: str | None = None
-    locator: str | None = None
-    quote: str | None = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class RequiredInput(BaseModel):

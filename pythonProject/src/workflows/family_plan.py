@@ -2,7 +2,6 @@
 
 import json
 import operator
-import re
 import time
 from pathlib import Path
 from typing import Annotated, Any, Literal, TypedDict
@@ -33,6 +32,14 @@ from agents.schemas import (
 from harness.dependencies import AgentDependencies
 from harness.errors import DependencyUnavailableError
 from harness.registry import AgentRegistry, agent_registry
+from safety.compliance import (
+    SAFE_FALLBACK,
+    ComplianceEvaluator,
+    render_recommendation,
+    revise_draft_once,
+)
+from safety.evidence import build_evidence_pack, citation_from_evidence
+from safety.models import FactualClaim, Recommendation, RecommendationDraft
 from tools.base import ToolCallContext
 from tools.policy_tools import Evidence
 from tools.product_tools import Product
@@ -87,7 +94,8 @@ class FamilyPlanState(TypedDict, total=False):
     disclaimer: str
     products: list[dict[str, Any]]
     evidence: list[dict[str, Any]]
-    draft: str
+    recommendation_draft: dict[str, Any]
+    citations: list[dict[str, Any]]
     compliance: dict[str, Any]
     final_answer: str
     handled_by: list[str]
@@ -163,6 +171,9 @@ def build_family_plan_graph(
 
     resolved_registry = registry or agent_registry
     resolved_rules = rules or load_coverage_rules()
+    compliance_evaluator = ComplianceEvaluator(
+        allowed_rule_versions={resolved_rules.version}
+    )
     workflow = StateGraph(FamilyPlanState)
 
     def gateway() -> Any:
@@ -366,8 +377,13 @@ def build_family_plan_graph(
                 },
                 context=ToolCallContext.from_config(config),
             )
-            evidence = [Evidence.model_validate(item) for item in result.data]
-            warnings = [] if evidence else ["未检索到可验证的条款依据，不生成条款引用。"]
+            evidence_pack = build_evidence_pack(
+                f"家庭保障规划 {query} 条款 免责 等待期",
+                result.data,
+                top_k=6,
+            )
+            evidence = evidence_pack.evidence
+            warnings = evidence_pack.warnings
             status: Literal["completed", "degraded"] = "completed"
         except DependencyUnavailableError:
             evidence = []
@@ -393,9 +409,15 @@ def build_family_plan_graph(
             evidence=[Evidence.model_validate(item) for item in state.get("evidence", [])],
             warnings=state.get("warnings", []),
         )
-        output = AggregateAgentOutput(draft=_aggregate_plan(agent_input, state["disclaimer"]))
+        output = AggregateAgentOutput(
+            draft=_build_recommendation_draft(
+                agent_input,
+                disclaimer=state["disclaimer"],
+                rule_version=resolved_rules.version,
+            )
+        )
         return {
-            "draft": output.draft,
+            "recommendation_draft": output.draft.model_dump(mode="json"),
             "agent_trace": [_trace("aggregate", 4, started)],
         }
 
@@ -404,33 +426,42 @@ def build_family_plan_graph(
         agent_input = resolved_registry.validate_input(
             "compliance_agent",
             ComplianceAgentInput(
-                draft=state["draft"],
+                draft=RecommendationDraft.model_validate(state["recommendation_draft"]),
                 products=[Product.model_validate(item) for item in state.get("products", [])],
                 evidence=[Evidence.model_validate(item) for item in state.get("evidence", [])],
+                user_question=_latest_user_text(state.get("messages", [])),
                 warnings=state.get("warnings", []),
             ),
         )
-        issues: list[str] = []
-        blocking_issues: list[str] = []
-        if not agent_input.products:
-            issues.append("没有查询到匹配的在售产品")
-        if not agent_input.evidence:
-            issues.append("没有可验证的条款证据")
-        if "不构成核保结论或正式保险建议" not in agent_input.draft:
-            blocking_issues.append("缺少演示规则与非正式建议声明")
-        if re.search(r"保证收益|一定承保|百分之百理赔", agent_input.draft):
-            blocking_issues.append("包含禁止的承诺性措辞")
-        approved = not blocking_issues
+        decision = compliance_evaluator.evaluate(
+            agent_input.draft,
+            products=agent_input.products,
+            evidence=agent_input.evidence,
+            user_question=agent_input.user_question,
+        )
+        final_draft = agent_input.draft
+        if not decision.passed:
+            final_draft = revise_draft_once(
+                final_draft,
+                decision,
+                products=agent_input.products,
+                evidence=agent_input.evidence,
+                allowed_rule_versions={resolved_rules.version},
+            )
+            decision = compliance_evaluator.evaluate(
+                final_draft,
+                products=agent_input.products,
+                evidence=agent_input.evidence,
+                user_question=agent_input.user_question,
+                revision_count=1,
+            )
+        final_answer = render_recommendation(final_draft) if decision.passed else SAFE_FALLBACK
         output = resolved_registry.validate_output(
             "compliance_agent",
             ComplianceAgentOutput(
-                approved=approved,
-                final_answer=(
-                    agent_input.draft
-                    if approved
-                    else "本次规划未通过合规检查，请联系人工保险顾问复核。"
-                ),
-                issues=[*blocking_issues, *issues],
+                decision=decision,
+                draft=final_draft,
+                final_answer=final_answer,
                 warnings=agent_input.warnings,
             ),
         )
@@ -443,7 +474,9 @@ def build_family_plan_graph(
             "compliance_agent",
         ]
         return {
-            "compliance": output.model_dump(mode="json"),
+            "compliance": output.decision.model_dump(mode="json"),
+            "recommendation_draft": output.draft.model_dump(mode="json"),
+            "citations": [item.model_dump(mode="json") for item in output.draft.citations],
             "final_answer": output.final_answer,
             "handled_by": handled_by,
             "agent_trace": [_trace("compliance_agent", 5, started)],
@@ -541,40 +574,89 @@ def _target_insurance_type(
     return next(rule.insurance_type for rule in rules.rules if rule.category == category)
 
 
-def _aggregate_plan(value: AggregateAgentInput, disclaimer: str) -> str:
+def _build_recommendation_draft(
+    value: AggregateAgentInput,
+    *,
+    disclaimer: str,
+    rule_version: str,
+) -> RecommendationDraft:
     profile = value.profile
-    lines = [
-        "## 家庭保障规划（演示版）",
-        "",
-        f"规划对象：{profile.age}岁"
-        + (f"，职业{profile.occupation}" if profile.occupation else "")
-        + (f"，年度预算约{profile.budget:.0f}元" if profile.budget is not None else ""),
-        "",
-        "### 保障缺口",
-    ]
-    for gap in value.coverage_gaps:
-        lines.append(
-            f"- {gap.category}: 当前{gap.current_coverage:.0f}元，"
-            f"演示建议{gap.recommended_coverage:.0f}元，缺口{gap.gap:.0f}元，"
-            f"优先级{gap.priority}。"
+    summary = (
+        f"规划对象为{profile.age}岁"
+        + (f"、职业{profile.occupation}" if profile.occupation else "")
+        + (f"、年度预算约{profile.budget:.0f}元" if profile.budget is not None else "")
+        + "。以下内容只使用产品库、版本化业务规则和检索证据。"
+    )
+    if not value.evidence:
+        summary += " 暂无可验证条款证据，条款信息不确定、需人工确认。"
+
+    recommendations = [
+        Recommendation(
+            product_id=product.product_id,
+            product_name=product.product_name,
+            insurance_type=product.insurance_type,
+            min_age=product.min_age,
+            max_age=product.max_age,
+            min_price=product.min_price,
+            max_price=product.max_price,
+            rationale="该候选来自当前在售产品查询，最终能否投保以核保结果为准。",
         )
-    lines.extend(["", "### 在售产品候选"])
-    if value.products:
-        for product in value.products:
-            lines.append(
-                f"- {product.product_name}（{product.product_id}）："
-                f"最低保费{product.min_price or 0:.0f}元。"
+        for product in value.products
+    ]
+    claims: list[FactualClaim] = []
+    for index, gap in enumerate(value.coverage_gaps, start=1):
+        claims.append(
+            FactualClaim(
+                claim_id=f"RULE-{index}",
+                text=(
+                    f"{gap.category} 当前保障{gap.current_coverage:.0f}元，"
+                    f"演示规则建议{gap.recommended_coverage:.0f}元，缺口{gap.gap:.0f}元。"
+                ),
+                source_type="business_rule",
+                rule_version=rule_version,
             )
-    else:
-        lines.append("- 当前条件下没有查询到匹配的在售产品。")
-    lines.extend(["", "### 条款证据"])
-    if value.evidence:
-        for evidence in value.evidence[:5]:
-            lines.append(f"- {evidence.content}（来源：{evidence.source or '知识库'}）")
-    else:
-        lines.append("- 暂无可验证条款证据，不对等待期、免责或理赔范围作具体断言。")
-    if value.warnings:
-        lines.extend(["", "### 数据限制"])
-        lines.extend(f"- {warning}" for warning in value.warnings)
-    lines.extend(["", f"> {disclaimer}"])
-    return "\n".join(lines)
+        )
+    for index, product in enumerate(value.products, start=1):
+        if product.min_price is not None:
+            claims.append(
+                FactualClaim(
+                    claim_id=f"PRODUCT-{index}",
+                    text=f"{product.product_name} 最低保费为{product.min_price:.0f}元。",
+                    source_type="product_field",
+                    product_id=product.product_id,
+                    field_name="min_price",
+                    value=product.min_price,
+                )
+            )
+
+    citations = []
+    recommended_ids = {item.product_id for item in value.products}
+    relevant_evidence = [
+        item
+        for item in value.evidence
+        if not item.product_id or item.product_id in recommended_ids
+    ][:5]
+    for index, evidence in enumerate(relevant_evidence, start=1):
+        citation = citation_from_evidence(evidence)
+        citations.append(citation)
+        claims.append(
+            FactualClaim(
+                claim_id=f"EVIDENCE-{index}",
+                text=citation.claim,
+                source_type="citation",
+                product_id=evidence.product_id,
+                citation_id=citation.citation_id,
+            )
+        )
+
+    disclaimers = [disclaimer]
+    disclaimers.extend(value.warnings)
+    if not value.evidence:
+        disclaimers.append("暂无可验证条款证据，不确定信息需人工确认。")
+    return RecommendationDraft(
+        summary=summary,
+        recommendations=recommendations,
+        factual_claims=claims,
+        citations=citations,
+        disclaimers=list(dict.fromkeys(disclaimers)),
+    )

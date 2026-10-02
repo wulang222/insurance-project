@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from safety.models import ComplianceDecision, RecommendationDraft
 from tools.policy_tools import Evidence
 from tools.product_tools import Product
 
@@ -113,22 +114,23 @@ class AggregateAgentInput(BaseModel):
 class AggregateAgentOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    draft: str = Field(min_length=1)
+    draft: RecommendationDraft
 
 
 class ComplianceAgentInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    draft: str
+    draft: RecommendationDraft
     products: list[Product]
     evidence: list[Evidence]
+    user_question: str
     warnings: list[str] = Field(default_factory=list)
 
 
 class ComplianceAgentOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    approved: bool
+    decision: ComplianceDecision
+    draft: RecommendationDraft
     final_answer: str = Field(min_length=1)
-    issues: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)

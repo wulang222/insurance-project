@@ -26,3 +26,4 @@ class SupervisorAgentState(TypedDict, total=False):
     final_answer: str
     handled_by: str | list[str]
     warnings: list[str]
+    citations: list[dict[str, Any]]

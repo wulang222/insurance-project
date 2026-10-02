@@ -92,6 +92,21 @@ CRM 并行，保障缺口计算完成后产品查询与条款检索并行，最�
 保障缺口使用 `src/workflows/coverage_rules.json` 中的演示规则，不构成核保结论或
 正式保险建议。
 
+Day 5 Evidence RAG 与合规验收：
+
+```bash
+uv run python -m pytest \
+  tests/security/test_prompt_injection.py \
+  tests/security/test_unsupported_claims.py \
+  tests/security/test_product_fabrication.py \
+  tests/integration/test_compliance_revision.py -q
+```
+
+知识工具只返回带完整文档元数据的证据，不直接生成结论。家庭保障工作流按
+`retrieve → rerank/deduplicate → evidence pack → answer` 执行；每条产品、规则或条款
+事实必须指向产品库字段、规则版本或 Citation。输出先经过代码级事实校验，再经过
+语义合规评估；失败时最多执行一次定向修订，第二次仍失败则返回人工复核兜底。
+
 Contract 测试会 mock LLM、MySQL 和 Milvus，不依赖外部服务。需要显式运行供应商集成测试时，设置 `RUN_EXTERNAL_INTEGRATION_TESTS=true`。
 
 ## 目录入口

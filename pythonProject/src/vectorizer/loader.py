@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import fnmatch
+import hashlib
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -66,11 +68,29 @@ def load_file(file_path: Path) -> dict[str, Any] | None:
     try:
         loader = _LOADER_MAP.get(ext, _load_text)
         text, meta = loader(file_path)
+        checksum = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        modified = datetime.fromtimestamp(
+            file_path.stat().st_mtime,
+            tz=timezone.utc,
+        ).date().isoformat()
+        metadata = {
+            **meta,
+            "document_id": f"doc-{checksum[:16]}",
+            "product_id": meta.get("product_id"),
+            "document_type": ext.lstrip(".") or "unknown",
+            "title": file_path.stem,
+            "section": meta.get("section"),
+            "page": meta.get("page"),
+            "effective_date": meta.get("effective_date", modified),
+            "version": str(meta.get("version", "unversioned")),
+            "source_path": str(file_path),
+            "checksum": checksum,
+        }
         return {
             "path": str(file_path),
             "file_type": ext.lstrip("."),
             "content": text,
-            "metadata": meta,
+            "metadata": metadata,
         }
     except Exception as e:
         logger.warning("加载失败 [%s]: %s", file_path, e)

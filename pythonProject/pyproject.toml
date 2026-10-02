@@ -16,6 +16,9 @@ dependencies = [
     "pymilvus>=2.5.0",
     "pymysql>=1.1.0",
     "langgraph-checkpoint-postgres>=3.0.0",
+    "opentelemetry-api>=1.34.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.34.0",
+    "opentelemetry-sdk>=1.34.0",
     "psycopg[binary]>=3.2.0",
     "uvicorn[standard]>=0.34.0",
 ]
@@ -104,5 +107,12 @@ include = ["**/*.py", "**/*.json"]
 from = "src/safety"
 include = ["**/*.py"]
 
+[[tool.uv.build-backend.packages]]
+from = "src/observability"
+include = ["**/*.py"]
+
 [tool.ruff]
 target-version = "py313"
+
+[tool.pytest.ini_options]
+pythonpath = [".", "src"]

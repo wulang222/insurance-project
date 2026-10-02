@@ -106,6 +106,8 @@ def build_tool_registry(
                     run_id=context.run_id,
                     user_id=context.user_id,
                     max_model_calls=context.max_model_calls,
+                    model_policy=context.model_policy,
+                    prompt_versions=context.prompt_versions,
                 ),
             )
             return result.data

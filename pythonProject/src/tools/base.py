@@ -36,6 +36,8 @@ class ToolCallContext(BaseModel):
     max_tool_calls: int = Field(default=12, ge=0)
     max_model_calls: int = Field(default=8, ge=0)
     idempotency_key: str | None = None
+    model_policy: str = "balanced"
+    prompt_versions: dict[str, str] = Field(default_factory=dict)
 
     @classmethod
     def from_config(cls, config: dict[str, Any] | None) -> "ToolCallContext":
@@ -49,6 +51,8 @@ class ToolCallContext(BaseModel):
             max_tool_calls=int(values.get("max_tool_calls", 12)),
             max_model_calls=int(values.get("max_model_calls", 8)),
             idempotency_key=values.get("idempotency_key"),
+            model_policy=str(values.get("model_policy", "balanced")),
+            prompt_versions=dict(values.get("prompt_versions", {})),
         )
 
 

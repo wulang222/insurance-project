@@ -47,6 +47,24 @@ def registry() -> PromptRegistry:
     )
 
 
+def versioned_registry() -> PromptRegistry:
+    return PromptRegistry(
+        [
+            PromptDefinition(
+                id="test.route",
+                version=version,
+                role="router",
+                policy=["json only"],
+                task=f"{version} route {{question}}",
+                input_contract={"required": ["question"]},
+                output_contract={"type": "object"},
+                examples=[],
+            )
+            for version in ("v1", "v2")
+        ]
+    )
+
+
 def context(limit: int = 4) -> ModelCallContext:
     return ModelCallContext(request_id="request-1", run_id="run-1", max_model_calls=limit)
 
@@ -121,3 +139,39 @@ async def test_recommendation_uses_primary_then_fallback_on_transient_failure() 
     assert result.data == "safe answer"
     assert result.fallback_used is True
     assert created == ["primary", "fallback"]
+
+
+@pytest.mark.asyncio
+async def test_replay_context_overrides_prompt_version_and_model_policy() -> None:
+    created: list[str] = []
+    sequence_model = SequenceModel(['{"route":"knowledge_agent"}'])
+
+    def factory(*, model: str, temperature: float):
+        del temperature
+        created.append(model)
+        return sequence_model
+
+    gateway = ModelGateway(
+        factory,
+        versioned_registry(),
+        primary_model="primary",
+        low_cost_model="cheap-model",
+    )
+    result = await gateway.invoke(
+        ModelRequest(
+            prompt_id="test.route",
+            variables={"question": "等待期"},
+            strategy="recommend",
+            response_model=Decision,
+        ),
+        context=ModelCallContext(
+            request_id="request-1",
+            run_id="replay-1",
+            model_policy="cheap",
+            prompt_versions={"test": "v2"},
+        ),
+    )
+
+    assert result.prompt_version == "v2"
+    assert result.model_name == "cheap-model"
+    assert created == ["cheap-model"]

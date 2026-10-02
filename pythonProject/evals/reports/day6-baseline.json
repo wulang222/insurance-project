@@ -1,0 +1,1464 @@
+{
+  "generated_at": "2026-10-02T12:08:01.684850+00:00",
+  "total_cases": 55,
+  "passed_cases": 55,
+  "all_targets_met": true,
+  "summary": {
+    "routing": {
+      "cases": 15,
+      "passed": 15,
+      "rate": 1.0,
+      "target": 0.95,
+      "target_met": true
+    },
+    "profile_extraction": {
+      "cases": 10,
+      "passed": 10,
+      "rate": 1.0,
+      "target": 0.9,
+      "target_met": true
+    },
+    "tool_selection": {
+      "cases": 10,
+      "passed": 10,
+      "rate": 1.0,
+      "target": 0.95,
+      "target_met": true
+    },
+    "family_plan": {
+      "cases": 10,
+      "passed": 10,
+      "rate": 1.0,
+      "target": 0.85,
+      "target_met": true
+    },
+    "knowledge_grounding": {
+      "cases": 5,
+      "passed": 5,
+      "rate": 1.0,
+      "target": 1.0,
+      "target_met": true
+    },
+    "compliance": {
+      "cases": 5,
+      "passed": 5,
+      "rate": 1.0,
+      "target": 1.0,
+      "target_met": true
+    }
+  },
+  "human_review": {
+    "required": true,
+    "reason": "模型型质量维度不能由系统完全自证",
+    "sample_case_ids": [
+      "routing-001",
+      "routing-002",
+      "routing-003",
+      "routing-004",
+      "routing-005",
+      "routing-006"
+    ]
+  },
+  "results": [
+    {
+      "dataset": "routing",
+      "case_id": "routing-001",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='family_plan'; actual='family_plan'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-001; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-002",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='family_plan'; actual='family_plan'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-002; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-003",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='family_plan'; actual='family_plan'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-003; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-004",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='family_plan'; actual='family_plan'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-004; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-005",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='family_plan'; actual='family_plan'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-005; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-006",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='crm_agent'; actual='crm_agent'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-006; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-007",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='crm_agent'; actual='crm_agent'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-007; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-008",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='crm_agent'; actual='crm_agent'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-008; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-009",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='insurance_agent'; actual='insurance_agent'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-009; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-010",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='insurance_agent'; actual='insurance_agent'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-010; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-011",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='insurance_agent'; actual='insurance_agent'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-011; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-012",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='insurance_agent'; actual='insurance_agent'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-012; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-013",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='knowledge_agent'; actual='knowledge_agent'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-013; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-014",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='knowledge_agent'; actual='knowledge_agent'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-014; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "routing",
+      "case_id": "routing-015",
+      "passed": true,
+      "grades": [
+        {
+          "name": "route_exact_match",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected='knowledge_agent'; actual='knowledge_agent'",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=routing-015; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "profile_extraction",
+      "case_id": "profile-001",
+      "passed": true,
+      "grades": [
+        {
+          "name": "profile_field_accuracy",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected={'age': 28, 'occupation': '程序员', 'budget': 5000.0, 'insurance_type': '重疾险'}; actual={'age': 28, 'occupation': '程序员', 'budget': 5000.0, 'insurance_type': '重疾险'}",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=profile-001; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "profile_extraction",
+      "case_id": "profile-002",
+      "passed": true,
+      "grades": [
+        {
+          "name": "profile_field_accuracy",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected={'age': 35, 'occupation': '教师', 'budget': 6000.0, 'insurance_type': '医疗险'}; actual={'age': 35, 'occupation': '教师', 'budget': 6000.0, 'insurance_type': '医疗险'}",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=profile-002; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "profile_extraction",
+      "case_id": "profile-003",
+      "passed": true,
+      "grades": [
+        {
+          "name": "profile_field_accuracy",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected={'age': 42, 'occupation': '医生', 'budget': 10000.0, 'insurance_type': '寿险'}; actual={'age': 42, 'occupation': '医生', 'budget': 10000.0, 'insurance_type': '寿险'}",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=profile-003; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "profile_extraction",
+      "case_id": "profile-004",
+      "passed": true,
+      "grades": [
+        {
+          "name": "profile_field_accuracy",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected={'age': 26, 'occupation': '设计师', 'budget': 3000.0, 'insurance_type': '意外险'}; actual={'age': 26, 'occupation': '设计师', 'budget': 3000.0, 'insurance_type': '意外险'}",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=profile-004; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "profile_extraction",
+      "case_id": "profile-005",
+      "passed": true,
+      "grades": [
+        {
+          "name": "profile_field_accuracy",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected={'age': 31, 'occupation': '律师', 'budget': 8000.0, 'insurance_type': '重疾险'}; actual={'age': 31, 'occupation': '律师', 'budget': 8000.0, 'insurance_type': '重疾险'}",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=profile-005; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "profile_extraction",
+      "case_id": "profile-006",
+      "passed": true,
+      "grades": [
+        {
+          "name": "profile_field_accuracy",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected={'age': None, 'occupation': '护士', 'budget': 4500.0, 'insurance_type': '医疗险'}; actual={'age': None, 'occupation': '护士', 'budget': 4500.0, 'insurance_type': '医疗险'}",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=profile-006; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "profile_extraction",
+      "case_id": "profile-007",
+      "passed": true,
+      "grades": [
+        {
+          "name": "profile_field_accuracy",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected={'age': 50, 'occupation': '公务员', 'budget': 12000.0, 'insurance_type': '年金险'}; actual={'age': 50, 'occupation': '公务员', 'budget': 12000.0, 'insurance_type': '年金险'}",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=profile-007; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "profile_extraction",
+      "case_id": "profile-008",
+      "passed": true,
+      "grades": [
+        {
+          "name": "profile_field_accuracy",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected={'age': 38, 'occupation': '工程师', 'budget': 7000.0, 'insurance_type': None}; actual={'age': 38, 'occupation': '工程师', 'budget': 7000.0, 'insurance_type': None}",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=profile-008; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "profile_extraction",
+      "case_id": "profile-009",
+      "passed": true,
+      "grades": [
+        {
+          "name": "profile_field_accuracy",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected={'age': 29, 'occupation': '销售', 'budget': None, 'insurance_type': '意外险'}; actual={'age': 29, 'occupation': '销售', 'budget': None, 'insurance_type': '意外险'}",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=profile-009; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "profile_extraction",
+      "case_id": "profile-010",
+      "passed": true,
+      "grades": [
+        {
+          "name": "profile_field_accuracy",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected={'age': 45, 'occupation': '会计', 'budget': 5000.0, 'insurance_type': '寿险'}; actual={'age': 45, 'occupation': '会计', 'budget': 5000.0, 'insurance_type': '寿险'}",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=profile-010; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "tool_selection",
+      "case_id": "tool-001",
+      "passed": true,
+      "grades": [
+        {
+          "name": "expected_tool_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "forbidden_tool_not_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "no forbidden values",
+          "review_required": false
+        },
+        {
+          "name": "tool_arguments_valid",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=tool-001; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "tool_selection",
+      "case_id": "tool-002",
+      "passed": true,
+      "grades": [
+        {
+          "name": "expected_tool_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "forbidden_tool_not_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "no forbidden values",
+          "review_required": false
+        },
+        {
+          "name": "tool_arguments_valid",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=tool-002; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "tool_selection",
+      "case_id": "tool-003",
+      "passed": true,
+      "grades": [
+        {
+          "name": "expected_tool_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "forbidden_tool_not_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "no forbidden values",
+          "review_required": false
+        },
+        {
+          "name": "tool_arguments_valid",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=tool-003; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "tool_selection",
+      "case_id": "tool-004",
+      "passed": true,
+      "grades": [
+        {
+          "name": "expected_tool_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "forbidden_tool_not_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "no forbidden values",
+          "review_required": false
+        },
+        {
+          "name": "tool_arguments_valid",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=tool-004; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "tool_selection",
+      "case_id": "tool-005",
+      "passed": true,
+      "grades": [
+        {
+          "name": "expected_tool_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "forbidden_tool_not_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "no forbidden values",
+          "review_required": false
+        },
+        {
+          "name": "tool_arguments_valid",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=tool-005; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "tool_selection",
+      "case_id": "tool-006",
+      "passed": true,
+      "grades": [
+        {
+          "name": "expected_tool_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "forbidden_tool_not_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "no forbidden values",
+          "review_required": false
+        },
+        {
+          "name": "tool_arguments_valid",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=tool-006; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "tool_selection",
+      "case_id": "tool-007",
+      "passed": true,
+      "grades": [
+        {
+          "name": "expected_tool_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "forbidden_tool_not_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "no forbidden values",
+          "review_required": false
+        },
+        {
+          "name": "tool_arguments_valid",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=tool-007; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "tool_selection",
+      "case_id": "tool-008",
+      "passed": true,
+      "grades": [
+        {
+          "name": "expected_tool_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "forbidden_tool_not_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "no forbidden values",
+          "review_required": false
+        },
+        {
+          "name": "tool_arguments_valid",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=tool-008; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "tool_selection",
+      "case_id": "tool-009",
+      "passed": true,
+      "grades": [
+        {
+          "name": "expected_tool_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "forbidden_tool_not_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "no forbidden values",
+          "review_required": false
+        },
+        {
+          "name": "tool_arguments_valid",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=tool-009; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "tool_selection",
+      "case_id": "tool-010",
+      "passed": true,
+      "grades": [
+        {
+          "name": "expected_tool_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "forbidden_tool_not_called",
+          "passed": true,
+          "score": 1.0,
+          "reason": "no forbidden values",
+          "review_required": false
+        },
+        {
+          "name": "tool_arguments_valid",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=tool-010; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "family_plan",
+      "case_id": "family-001",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_agents",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "interrupt_resume_outcome",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=family-001; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "family_plan",
+      "case_id": "family-002",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_agents",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "interrupt_resume_outcome",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=family-002; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "family_plan",
+      "case_id": "family-003",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_agents",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "interrupt_resume_outcome",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=family-003; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "family_plan",
+      "case_id": "family-004",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_agents",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "interrupt_resume_outcome",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=family-004; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "family_plan",
+      "case_id": "family-005",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_agents",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "interrupt_resume_outcome",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=False; actual=False",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=family-005; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "family_plan",
+      "case_id": "family-006",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_agents",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "interrupt_resume_outcome",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=family-006; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "family_plan",
+      "case_id": "family-007",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_agents",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "interrupt_resume_outcome",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=family-007; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "family_plan",
+      "case_id": "family-008",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_agents",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "interrupt_resume_outcome",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=family-008; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "family_plan",
+      "case_id": "family-009",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_agents",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "interrupt_resume_outcome",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=family-009; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "family_plan",
+      "case_id": "family-010",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_agents",
+          "passed": true,
+          "score": 1.0,
+          "reason": "all required values present",
+          "review_required": false
+        },
+        {
+          "name": "interrupt_resume_outcome",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=family-010; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "knowledge_grounding",
+      "case_id": "knowledge-001",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_citation_present",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "uncertainty_when_no_evidence",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=False; actual=False",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=knowledge-001; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "knowledge_grounding",
+      "case_id": "knowledge-002",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_citation_present",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "uncertainty_when_no_evidence",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=False; actual=False",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=knowledge-002; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "knowledge_grounding",
+      "case_id": "knowledge-003",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_citation_present",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "uncertainty_when_no_evidence",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=False; actual=False",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=knowledge-003; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "knowledge_grounding",
+      "case_id": "knowledge-004",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_citation_present",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=False; actual=False",
+          "review_required": false
+        },
+        {
+          "name": "uncertainty_when_no_evidence",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=knowledge-004; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "knowledge_grounding",
+      "case_id": "knowledge-005",
+      "passed": true,
+      "grades": [
+        {
+          "name": "required_citation_present",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=False; actual=False",
+          "review_required": false
+        },
+        {
+          "name": "uncertainty_when_no_evidence",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=knowledge-005; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "compliance",
+      "case_id": "compliance-001",
+      "passed": true,
+      "grades": [
+        {
+          "name": "compliance_decision",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=True; actual=True",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=compliance-001; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "compliance",
+      "case_id": "compliance-002",
+      "passed": true,
+      "grades": [
+        {
+          "name": "compliance_decision",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=False; actual=False",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=compliance-002; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "compliance",
+      "case_id": "compliance-003",
+      "passed": true,
+      "grades": [
+        {
+          "name": "compliance_decision",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=False; actual=False",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=compliance-003; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "compliance",
+      "case_id": "compliance-004",
+      "passed": true,
+      "grades": [
+        {
+          "name": "compliance_decision",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=False; actual=False",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=compliance-004; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    },
+    {
+      "dataset": "compliance",
+      "case_id": "compliance-005",
+      "passed": true,
+      "grades": [
+        {
+          "name": "compliance_decision",
+          "passed": true,
+          "score": 1.0,
+          "reason": "expected=False; actual=False",
+          "review_required": false
+        },
+        {
+          "name": "model_quality_human_sample",
+          "passed": true,
+          "score": 1.0,
+          "reason": "case=compliance-005; automated precheck only; human review required",
+          "review_required": true
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{"id":"routing-001","input":{"message":"请做家庭保障规划"},"expected":{"route":"family_plan"}}
+{"id":"routing-002","input":{"message":"帮我配置全家保险"},"expected":{"route":"family_plan"}}
+{"id":"routing-003","input":{"message":"一家人应该怎么配置保障"},"expected":{"route":"family_plan"}}
+{"id":"routing-004","input":{"message":"需要一份家庭方案"},"expected":{"route":"family_plan"}}
+{"id":"routing-005","input":{"message":"全家保障怎么安排"},"expected":{"route":"family_plan"}}
+{"id":"routing-006","input":{"message":"分析客户流失风险"},"expected":{"route":"crm_agent"}}
+{"id":"routing-007","input":{"message":"生成续保提醒"},"expected":{"route":"crm_agent"}}
+{"id":"routing-008","input":{"message":"查看客户画像"},"expected":{"route":"crm_agent"}}
+{"id":"routing-009","input":{"message":"推荐一款重疾险"},"expected":{"route":"insurance_agent"}}
+{"id":"routing-010","input":{"message":"30岁程序员怎么买保险"},"expected":{"route":"insurance_agent"}}
+{"id":"routing-011","input":{"message":"预算5000想买医疗险"},"expected":{"route":"insurance_agent"}}
+{"id":"routing-012","input":{"message":"什么产品适合我"},"expected":{"route":"insurance_agent"}}
+{"id":"routing-013","input":{"message":"等待期是什么意思"},"expected":{"route":"knowledge_agent"}}
+{"id":"routing-014","input":{"message":"解释一下免责条款"},"expected":{"route":"knowledge_agent"}}
+{"id":"routing-015","input":{"message":"轻症豁免是什么"},"expected":{"route":"knowledge_agent"}}

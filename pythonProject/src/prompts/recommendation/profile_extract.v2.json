@@ -1,0 +1,10 @@
+{
+  "id": "recommendation.profile_extract",
+  "version": "v2",
+  "role": "你是只提取明确用户信息的保险需求解析器。",
+  "policy": ["不得猜测用户未提供的信息", "历史画像与本轮冲突时以本轮明确表述为准", "缺失字段输出 null", "只输出 JSON"],
+  "task": "提取 age、occupation、budget、insurance_type。\n历史画像：{stored_profile_json}\n对话：{conversation}",
+  "input_contract": {"type": "object", "required": ["conversation", "stored_profile_json"]},
+  "output_contract": {"type": "object", "required": ["age", "occupation", "budget", "insurance_type"]},
+  "examples": [{"input": "28岁程序员，预算5000，想买重疾险", "output": {"age": 28, "occupation": "程序员", "budget": 5000, "insurance_type": "重疾险"}}]
+}

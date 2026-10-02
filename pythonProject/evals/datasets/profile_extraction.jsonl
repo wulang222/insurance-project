@@ -1,0 +1,10 @@
+{"id":"profile-001","input":{"message":"我28岁，是程序员，预算5000，想买重疾险"},"expected":{"profile":{"age":28,"occupation":"程序员","budget":5000.0,"insurance_type":"重疾险"}}}
+{"id":"profile-002","input":{"message":"35岁教师，每年保费6000，考虑医疗险"},"expected":{"profile":{"age":35,"occupation":"教师","budget":6000.0,"insurance_type":"医疗险"}}}
+{"id":"profile-003","input":{"message":"42岁医生，预算10000，想买寿险"},"expected":{"profile":{"age":42,"occupation":"医生","budget":10000.0,"insurance_type":"寿险"}}}
+{"id":"profile-004","input":{"message":"26岁设计师，预算3000，意外险"},"expected":{"profile":{"age":26,"occupation":"设计师","budget":3000.0,"insurance_type":"意外险"}}}
+{"id":"profile-005","input":{"message":"31岁律师，每年投入8000，重疾险"},"expected":{"profile":{"age":31,"occupation":"律师","budget":8000.0,"insurance_type":"重疾险"}}}
+{"id":"profile-006","input":{"message":"护士，预算4500，医疗险"},"expected":{"profile":{"age":null,"occupation":"护士","budget":4500.0,"insurance_type":"医疗险"}}}
+{"id":"profile-007","input":{"message":"50岁公务员，保费预算12000，年金险"},"expected":{"profile":{"age":50,"occupation":"公务员","budget":12000.0,"insurance_type":"年金险"}}}
+{"id":"profile-008","input":{"message":"38岁工程师，预算7000"},"expected":{"profile":{"age":38,"occupation":"工程师","budget":7000.0,"insurance_type":null}}}
+{"id":"profile-009","input":{"message":"我29岁做销售，想买意外险"},"expected":{"profile":{"age":29,"occupation":"销售","budget":null,"insurance_type":"意外险"}}}
+{"id":"profile-010","input":{"message":"45岁会计，每年5000，寿险"},"expected":{"profile":{"age":45,"occupation":"会计","budget":5000.0,"insurance_type":"寿险"}}}

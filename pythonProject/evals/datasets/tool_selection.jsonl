@@ -1,0 +1,10 @@
+{"id":"tool-001","input":{"message":"30岁程序员推荐重疾险"},"expected":{"required_tools":["extract_customer_profile","search_active_insurance_products","retrieve_policy_evidence"],"forbidden_tools":["save_profile_memory"]}}
+{"id":"tool-002","input":{"message":"等待期是什么意思"},"expected":{"required_tools":["retrieve_policy_evidence"],"forbidden_tools":["search_active_insurance_products"]}}
+{"id":"tool-003","input":{"message":"分析客户流失风险"},"expected":{"required_tools":["get_customer_policy_portfolio"],"forbidden_tools":["save_profile_memory"]}}
+{"id":"tool-004","input":{"message":"做家庭保障规划"},"expected":{"required_tools":["extract_customer_profile","get_customer_policy_portfolio","calculate_coverage_gap","search_active_insurance_products","retrieve_policy_evidence"],"forbidden_tools":["save_profile_memory"]}}
+{"id":"tool-005","input":{"message":"预算5000想买医疗险"},"expected":{"required_tools":["extract_customer_profile","search_active_insurance_products"],"forbidden_tools":["get_customer_policy_portfolio"]}}
+{"id":"tool-006","input":{"message":"免责条款如何理解"},"expected":{"required_tools":["retrieve_policy_evidence"],"forbidden_tools":["search_active_insurance_products"]}}
+{"id":"tool-007","input":{"message":"生成续保提醒"},"expected":{"required_tools":["get_customer_policy_portfolio"],"forbidden_tools":["search_active_insurance_products"]}}
+{"id":"tool-008","input":{"message":"全家保险怎么安排"},"expected":{"required_tools":["calculate_coverage_gap","search_active_insurance_products","retrieve_policy_evidence"],"forbidden_tools":["save_profile_memory"]}}
+{"id":"tool-009","input":{"message":"什么产品适合我"},"expected":{"required_tools":["extract_customer_profile","search_active_insurance_products"],"forbidden_tools":["get_customer_policy_portfolio"]}}
+{"id":"tool-010","input":{"message":"理赔流程是什么"},"expected":{"required_tools":["retrieve_policy_evidence"],"forbidden_tools":["save_profile_memory"]}}

@@ -18,6 +18,7 @@ from infrastructure.postgres import PostgresResources, open_postgres_resources
 from insurance_agent.config import create_llm
 from middleware.model import ModelGateway
 from middleware.tool import ToolGateway
+from observability.telemetry import Observability
 from prompts.registry import PromptRegistry
 from supervisor_agent.graph import build_graph as build_supervisor_graph
 from tools.crm_tools import FakeCustomerRepository
@@ -45,7 +46,12 @@ def build_lifespan(
             mysql_client = mysql_factory()
             milvus_client = milvus_factory()
             prompt_registry = PromptRegistry.default()
-            model_gateway = ModelGateway(create_llm, prompt_registry)
+            observability = Observability()
+            model_gateway = ModelGateway(
+                create_llm,
+                prompt_registry,
+                observability=observability,
+            )
             tool_registry = build_tool_registry(
                 model_gateway=model_gateway,
                 product_repository=MySQLProductRepository(mysql_client),
@@ -53,7 +59,7 @@ def build_lifespan(
                 customer_repository=FakeCustomerRepository(),
                 memory_repository=ProfileMemoryRepository(postgres.store),
             )
-            tool_gateway = ToolGateway(tool_registry)
+            tool_gateway = ToolGateway(tool_registry, observability=observability)
             specialist_registry = build_agent_registry(set(tool_registry.names()))
             dependencies = AgentDependencies(
                 llm_factory=create_llm,
@@ -63,6 +69,7 @@ def build_lifespan(
                 model_gateway=model_gateway,
                 prompt_registry=prompt_registry,
                 agent_registry=specialist_registry,
+                tracer=observability,
                 mysql_client=mysql_client,
                 milvus_client=milvus_client,
             )
@@ -76,10 +83,12 @@ def build_lifespan(
                 postgres.store,
                 prompt_version=os.getenv("AGENT_PROMPT_VERSION", "v1"),
                 model_policy=os.getenv("AGENT_MODEL_POLICY", "balanced"),
+                observability=observability,
             )
 
             app.state.dependencies = dependencies
             app.state.runtime = runtime
+            app.state.observability = observability
             try:
                 yield
             finally:
@@ -87,6 +96,7 @@ def build_lifespan(
                 await mysql_client.aclose()
                 app.state.runtime = None
                 app.state.dependencies = None
+                app.state.observability = None
 
     return lifespan
 

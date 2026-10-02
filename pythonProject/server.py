@@ -61,6 +61,14 @@ def create_app(
             "runtime": "ready" if ready else "unavailable",
         }
 
+    @app.get("/v1/metrics")
+    async def metrics(request: Request) -> dict:
+        observability = getattr(request.app.state, "observability", None)
+        if observability is None:
+            runtime = _runtime(request)
+            observability = runtime.observability
+        return observability.metrics.snapshot()
+
     @app.post("/chat", response_model=ChatResponse)
     async def chat(req: ChatRequest, request: Request) -> ChatResponse:
         """Legacy Java-compatible endpoint backed by the same durable runtime."""
@@ -147,6 +155,19 @@ def create_app(
         except RunNotFoundError as exc:
             raise HTTPException(status_code=404, detail=exc.to_dict()) from exc
         return RunResponse.from_snapshot(snapshot)
+
+    @app.get("/v1/runs/{run_id}/trace")
+    async def get_run_trace(run_id: str, request: Request) -> dict:
+        try:
+            record = await _runtime(request).get_record(run_id)
+        except RunNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=exc.to_dict()) from exc
+        if record.result is None:
+            return {"spans": [], "metrics": {}}
+        return {
+            "spans": record.result.trace.get("spans", []),
+            "metrics": record.result.trace.get("metrics", {}),
+        }
 
     @app.post("/v1/runs/{run_id}/resume", response_model=RunResponse)
     async def resume_run(

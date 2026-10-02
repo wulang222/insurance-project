@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Literal
@@ -12,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from harness.context import RunContext
 from harness.errors import AgentError, ErrorCode
 from harness.result import AgentResult, Citation, RequiredInput
+from observability.telemetry import Observability, get_observability, hash_user_id
 
 
 RunStatus = Literal["created", "running", "needs_input", "completed", "failed"]
@@ -40,6 +42,8 @@ class RunRecord(BaseModel):
     events: list[RunEvent] = Field(default_factory=list)
     created_at: str = Field(default_factory=_now)
     updated_at: str = Field(default_factory=_now)
+    replay_input: dict[str, Any] = Field(default_factory=dict)
+    parent_run_id: str | None = None
 
 
 class RunSnapshot(BaseModel):
@@ -80,11 +84,13 @@ class RunManager:
         *,
         prompt_version: str = "v1",
         model_policy: str = "balanced",
+        observability: Observability | None = None,
     ) -> None:
         self.graph = graph
         self.store = store
         self.prompt_version = prompt_version
         self.model_policy = model_policy
+        self.observability = observability or get_observability()
 
     async def start(
         self,
@@ -93,6 +99,7 @@ class RunManager:
         user_id: str | None = None,
         thread_id: str | None = None,
         request_id: str | None = None,
+        parent_run_id: str | None = None,
     ) -> RunSnapshot:
         context = RunContext(
             request_id=request_id or str(uuid.uuid4()),
@@ -102,7 +109,12 @@ class RunManager:
             prompt_version=self.prompt_version,
             model_policy=self.model_policy,
         )
-        record = RunRecord(context=context, status="created")
+        record = RunRecord(
+            context=context,
+            status="created",
+            replay_input={"message": message, "user_id": user_id},
+            parent_run_id=parent_run_id,
+        )
         await self._save(record)
         input_data: dict[str, Any] = {
             "messages": [{"role": "user", "content": message}]
@@ -118,6 +130,7 @@ class RunManager:
                 f"run {run_id} is {record.status}, expected needs_input",
                 details={"run_id": run_id, "status": record.status},
             )
+        record.replay_input.setdefault("resume_payloads", []).append(payload)
         self._append_event(record, "run.resumed", {"run_id": run_id})
         return await self._execute(record, Command(resume=payload), resumed=True)
 
@@ -127,6 +140,44 @@ class RunManager:
     async def get_events(self, run_id: str) -> list[RunEvent]:
         return list((await self._load(run_id)).events)
 
+    async def get_record(self, run_id: str) -> RunRecord:
+        """Return the persisted record for observability and replay tooling."""
+
+        return await self._load(run_id)
+
+    async def replay(
+        self,
+        run_id: str,
+        *,
+        prompt_version: str | None = None,
+        model_policy: str | None = None,
+    ) -> RunSnapshot:
+        source = await self._load(run_id)
+        message = source.replay_input.get("message")
+        if not isinstance(message, str) or not message:
+            raise InvalidRunStateError(
+                f"run {run_id} has no replayable input",
+                details={"run_id": run_id},
+            )
+        replay_manager = RunManager(
+            self.graph,
+            self.store,
+            prompt_version=prompt_version or source.context.prompt_version,
+            model_policy=model_policy or source.context.model_policy,
+            observability=self.observability,
+        )
+        snapshot = await replay_manager.start(
+            message,
+            user_id=source.replay_input.get("user_id"),
+            thread_id=f"{source.context.thread_id}:replay:{uuid.uuid4().hex[:8]}",
+            parent_run_id=run_id,
+        )
+        for payload in source.replay_input.get("resume_payloads", []):
+            if snapshot.status != "needs_input":
+                break
+            snapshot = await replay_manager.resume(snapshot.run_id, payload)
+        return snapshot
+
     async def _execute(
         self,
         record: RunRecord,
@@ -134,6 +185,18 @@ class RunManager:
         *,
         resumed: bool,
     ) -> RunSnapshot:
+        execution_started = time.perf_counter()
+        span_scope = self.observability.span(
+            f"run {record.context.run_id}",
+            {
+                "run.id": record.context.run_id,
+                "thread.id": record.context.thread_id,
+                "user.id_hash": hash_user_id(record.context.user_id),
+                "prompt.version": record.context.prompt_version,
+                "model.policy": record.context.model_policy,
+            },
+        )
+        run_span = span_scope.__enter__()
         record.status = "running"
         record.updated_at = _now()
         if not resumed:
@@ -162,11 +225,14 @@ class RunManager:
                 ],
                 "max_tool_calls": record.context.max_tool_calls,
                 "max_model_calls": record.context.max_model_calls,
+                "model_policy": record.context.model_policy,
+                "prompt_versions": _parse_prompt_versions(record.context.prompt_version),
             }
         }
         if record.context.user_id:
             config["configurable"]["user_id"] = record.context.user_id
 
+        output: Any = {}
         try:
             output = await self.graph.ainvoke(graph_input, config)
             interrupts = output.get("__interrupt__", ()) if isinstance(output, dict) else ()
@@ -185,6 +251,7 @@ class RunManager:
                     "run.interrupted",
                     required.model_dump(exclude_none=True, by_alias=True),
                 )
+                self.observability.metrics.increment("interrupt_total")
             else:
                 record.status = "completed"
                 record.result = self._completed_result(record, output)
@@ -208,6 +275,28 @@ class RunManager:
             )
             self._append_event(record, "run.failed", error)
 
+        self._record_graph_spans(output, record)
+        child = output.get("child_result", output) if isinstance(output, dict) else {}
+        compliance = child.get("compliance", {}) if isinstance(child, dict) else {}
+        if compliance and (
+            not compliance.get("passed", True) or int(compliance.get("revision_count", 0)) > 0
+        ):
+            self.observability.metrics.increment("compliance_reject_total")
+        if isinstance(child, dict) and "evidence" in child and not child.get("evidence"):
+            self.observability.metrics.increment("rag_no_evidence_total")
+        duration_seconds = max(0.0, time.perf_counter() - execution_started)
+        self.observability.metrics.increment("agent_run_total")
+        self.observability.metrics.observe("agent_run_duration_seconds", duration_seconds)
+        if record.status == "failed":
+            self.observability.metrics.increment("agent_run_failed_total")
+            run_span.error_type = str((record.result.error or {}).get("code", "failed"))
+        run_span.set_attribute("duration_ms", int(duration_seconds * 1000))
+        run_span.set_attribute("status", record.status)
+        span_scope.__exit__(None, None, None)
+
+        trace_snapshot = self.observability.snapshot(run_id=record.context.run_id)
+        if record.result is not None:
+            record.result.trace.update(trace_snapshot)
         record.updated_at = _now()
         await self._save(record)
         return RunSnapshot.from_record(record)
@@ -305,7 +394,7 @@ class RunManager:
         }
 
     @staticmethod
-    def _trace(record: RunRecord) -> dict[str, str]:
+    def _trace(record: RunRecord) -> dict[str, Any]:
         return {
             "request_id": record.context.request_id,
             "run_id": record.context.run_id,
@@ -334,3 +423,54 @@ class RunManager:
             )
         value = item.value if hasattr(item, "value") else item["value"]
         return RunRecord.model_validate(value)
+
+    def _record_graph_spans(self, output: Any, record: RunRecord) -> None:
+        if not isinstance(output, dict):
+            return
+        route = output.get("route")
+        now_ns = time.time_ns()
+        if route:
+            self.observability.record_completed_span(
+                "route",
+                start_ns=now_ns,
+                end_ns=now_ns,
+                attributes={"run.id": record.context.run_id, "route": route},
+            )
+        child = output.get("child_result", output)
+        if not isinstance(child, dict):
+            return
+        if child.get("plan"):
+            self.observability.record_completed_span(
+                "plan",
+                start_ns=now_ns,
+                end_ns=now_ns,
+                attributes={"run.id": record.context.run_id},
+            )
+        for item in child.get("agent_trace", []):
+            duration_ns = max(
+                0,
+                int(item.get("finished_at_ns", 0)) - int(item.get("started_at_ns", 0)),
+            )
+            end_ns = time.time_ns()
+            agent_name = str(item.get("agent", "unknown"))
+            self.observability.record_completed_span(
+                f"invoke_agent {agent_name}" if agent_name != "aggregate" else "aggregate",
+                start_ns=end_ns - duration_ns,
+                end_ns=end_ns,
+                attributes={
+                    "run.id": record.context.run_id,
+                    "agent.name": agent_name,
+                    "agent.version": "workflow" if agent_name == "aggregate" else "1.0.0",
+                    "status": str(item.get("status", "completed")),
+                },
+                status="ok" if item.get("status") != "failed" else "failed",
+            )
+
+
+def _parse_prompt_versions(value: str) -> dict[str, str]:
+    """Parse `recommendation:v2` or a global `v2` replay override."""
+
+    if ":" in value:
+        namespace, version = value.split(":", 1)
+        return {namespace: version}
+    return {"*": value}

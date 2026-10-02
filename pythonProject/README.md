@@ -107,6 +107,20 @@ uv run python -m pytest \
 事实必须指向产品库字段、规则版本或 Citation。输出先经过代码级事实校验，再经过
 语义合规评估；失败时最多执行一次定向修订，第二次仍失败则返回人工复核兜底。
 
+Day 6 可观测性、评测与 Replay：
+
+```bash
+uv run python -m evals.run --output evals/reports/day6-baseline.json
+uv run python -m evals.replay --run-id <run_id>
+uv run python -m evals.replay --run-id <run_id> \
+  --prompt-version recommendation:v2 --model-policy cheap
+```
+
+- `GET /v1/runs/{run_id}/trace`：查看 Run、路由、计划、Agent、Tool、Model Span。
+- `GET /v1/metrics`：查看运行、模型、工具、中断、合规和 RAG 指标。
+- Trace 只接受白名单属性，用户 ID 仅记录哈希，不记录电话、身份证、健康原文或密码。
+- `evals/datasets/` 包含 55 条离线用例；模型型质量项强制标记人工抽样，不能自证。
+
 Contract 测试会 mock LLM、MySQL 和 Milvus，不依赖外部服务。需要显式运行供应商集成测试时，设置 `RUN_EXTERNAL_INTEGRATION_TESTS=true`。
 
 ## 目录入口

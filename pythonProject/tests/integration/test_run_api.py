@@ -53,3 +53,11 @@ def test_run_api_interrupt_status_resume_and_events() -> None:
         assert "event: run.interrupted" in events.text
         assert "event: run.resumed" in events.text
         assert "event: run.completed" in events.text
+
+        trace = client.get(f"/v1/runs/{interrupted['run_id']}/trace")
+        assert trace.status_code == 200
+        assert any(item["name"].startswith("run ") for item in trace.json()["spans"])
+
+        metrics = client.get("/v1/metrics")
+        assert metrics.status_code == 200
+        assert metrics.json()["counters"]["agent_run_total"] >= 2

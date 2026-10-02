@@ -1,0 +1,10 @@
+{"id":"family-001","input":{"age":28},"expected":{"required_agents":["profile_agent","crm_agent","coverage_gap_agent","product_agent","knowledge_agent","aggregate","compliance_agent"],"completes":true}}
+{"id":"family-002","input":{"age":35},"expected":{"required_agents":["profile_agent","coverage_gap_agent","product_agent","compliance_agent"],"completes":true}}
+{"id":"family-003","input":{"age":42},"expected":{"required_agents":["crm_agent","knowledge_agent","aggregate"],"completes":true}}
+{"id":"family-004","input":{"age":51},"expected":{"required_agents":["profile_agent","product_agent","compliance_agent"],"completes":true}}
+{"id":"family-005","input":{"age":null},"expected":{"required_agents":["profile_agent","crm_agent"],"completes":false}}
+{"id":"family-006","input":{"age":19},"expected":{"required_agents":["coverage_gap_agent","product_agent","knowledge_agent"],"completes":true}}
+{"id":"family-007","input":{"age":60},"expected":{"required_agents":["profile_agent","aggregate","compliance_agent"],"completes":true}}
+{"id":"family-008","input":{"age":33},"expected":{"required_agents":["crm_agent","coverage_gap_agent","product_agent"],"completes":true}}
+{"id":"family-009","input":{"age":45},"expected":{"required_agents":["knowledge_agent","aggregate","compliance_agent"],"completes":true}}
+{"id":"family-010","input":{"age":27},"expected":{"required_agents":["profile_agent","crm_agent","coverage_gap_agent","product_agent","knowledge_agent","aggregate","compliance_agent"],"completes":true}}

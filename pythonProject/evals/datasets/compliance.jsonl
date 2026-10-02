@@ -1,0 +1,5 @@
+{"id":"compliance-001","input":{"mode":"valid"},"expected":{"passed":true}}
+{"id":"compliance-002","input":{"mode":"banned"},"expected":{"passed":false}}
+{"id":"compliance-003","input":{"mode":"fabricated"},"expected":{"passed":false}}
+{"id":"compliance-004","input":{"mode":"price_mismatch"},"expected":{"passed":false}}
+{"id":"compliance-005","input":{"mode":"missing_disclaimer"},"expected":{"passed":false}}

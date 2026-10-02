@@ -20,6 +20,7 @@ from harness.errors import (
     PolicyDeniedError,
 )
 from prompts.registry import PromptRegistry
+from observability.telemetry import Observability, get_observability, hash_user_id
 
 
 ModelStrategy = Literal[
@@ -34,6 +35,8 @@ class ModelCallContext(BaseModel):
     run_id: str = Field(min_length=1)
     user_id: str | None = None
     max_model_calls: int = Field(default=8, ge=0)
+    model_policy: str = "balanced"
+    prompt_versions: dict[str, str] = Field(default_factory=dict)
 
     @classmethod
     def from_config(cls, config: dict[str, Any] | None) -> "ModelCallContext":
@@ -43,6 +46,8 @@ class ModelCallContext(BaseModel):
             run_id=str(values.get("run_id", values.get("thread_id", "local-run"))),
             user_id=values.get("user_id"),
             max_model_calls=int(values.get("max_model_calls", 8)),
+            model_policy=str(values.get("model_policy", "balanced")),
+            prompt_versions=dict(values.get("prompt_versions", {})),
         )
 
 
@@ -114,6 +119,7 @@ class ModelGateway:
         stable_model: str | None = None,
         max_retries: int = 2,
         base_backoff_seconds: float = 0.05,
+        observability: Observability | None = None,
     ) -> None:
         self.llm_factory = llm_factory
         self.prompt_registry = prompt_registry
@@ -126,6 +132,7 @@ class ModelGateway:
         self.audit_events: list[ModelAuditEvent] = []
         self._call_counts: defaultdict[str, int] = defaultdict(int)
         self._lock = asyncio.Lock()
+        self.observability = observability or get_observability()
 
     async def invoke(
         self,
@@ -133,6 +140,15 @@ class ModelGateway:
         *,
         context: ModelCallContext,
     ) -> ModelResult:
+        request = request.model_copy(
+            update={
+                "prompt_version": self._resolve_prompt_version(
+                    request.prompt_id,
+                    request.prompt_version,
+                    context.prompt_versions,
+                )
+            }
+        )
         safe_variables = self._redact_prompt_variables(request.variables)
         rendered = self.prompt_registry.render(
             request.prompt_id,
@@ -141,13 +157,26 @@ class ModelGateway:
         )
         started = time.perf_counter()
         status = "failed"
-        model_name = self._select_model(request.strategy)
+        model_name = self._select_model(request.strategy, context.model_policy)
         input_tokens = self._estimate_tokens(rendered.text)
         output_tokens = 0
         repaired = False
         fallback_used = False
+        retry_count = 0
+        span_scope = self.observability.span(
+            "invoke_model",
+            {
+                "run.id": context.run_id,
+                "user.id_hash": hash_user_id(context.user_id),
+                "prompt.id": request.prompt_id,
+                "prompt.version": request.prompt_version,
+                "model.name": model_name,
+                "model.policy": context.model_policy,
+            },
+        )
+        span = span_scope.__enter__()
         try:
-            response, model_name, fallback_used = await self._call_with_policy(
+            response, model_name, fallback_used, retry_count = await self._call_with_policy(
                 rendered.text,
                 request,
                 context,
@@ -166,12 +195,13 @@ class ModelGateway:
                     f"原输出：{raw_text}\n"
                     f"输出契约：{json.dumps(self._schema(request.response_model), ensure_ascii=False)}"
                 )
-                repair_response, model_name, repair_fallback = await self._call_with_policy(
+                repair_response, model_name, repair_fallback, repair_retries = await self._call_with_policy(
                     repair_text,
                     request,
                     context,
                 )
                 fallback_used = fallback_used or repair_fallback
+                retry_count += repair_retries
                 raw_text = self._response_text(repair_response)
                 repair_in, repair_out = self._usage(repair_response, repair_text, raw_text)
                 input_tokens += repair_in
@@ -216,6 +246,7 @@ class ModelGateway:
                 retryable=True,
             ) from exc
         finally:
+            duration_ms = max(0, int((time.perf_counter() - started) * 1000))
             self.audit_events.append(
                 ModelAuditEvent(
                     request_id=context.request_id,
@@ -226,21 +257,36 @@ class ModelGateway:
                     prompt_hash=rendered.prompt_hash,
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
-                    duration_ms=max(0, int((time.perf_counter() - started) * 1000)),
+                    duration_ms=duration_ms,
                     status=status,
                     repaired=repaired,
                     fallback_used=fallback_used,
                 )
             )
+            self.observability.metrics.increment("model_call_total")
+            self.observability.metrics.increment(
+                "model_tokens_total",
+                input_tokens + output_tokens,
+            )
+            span.set_attribute("model.name", model_name)
+            span.set_attribute("gen_ai.usage.input_tokens", input_tokens)
+            span.set_attribute("gen_ai.usage.output_tokens", output_tokens)
+            span.set_attribute("duration_ms", duration_ms)
+            span.set_attribute("retry_count", retry_count)
+            span.set_attribute("fallback_used", fallback_used)
+            span.set_attribute("status", status)
+            if status != "ok":
+                span.error_type = status
+            span_scope.__exit__(None, None, None)
 
     async def _call_with_policy(
         self,
         prompt: str,
         request: ModelRequest,
         context: ModelCallContext,
-    ) -> tuple[Any, str, bool]:
+    ) -> tuple[Any, str, bool, int]:
         last_error: Exception | None = None
-        selected_model = self._select_model(request.strategy)
+        selected_model = self._select_model(request.strategy, context.model_policy)
         models = [selected_model]
         fallback_candidate = (
             self.fallback_model
@@ -258,7 +304,8 @@ class ModelGateway:
                         self._invoke_model(llm, prompt),
                         timeout=request.timeout_seconds,
                     )
-                    return response, model_name, model_index > 0
+                    retry_count = model_index * (self.max_retries + 1) + retry
+                    return response, model_name, model_index > 0, retry_count
                 except PolicyDeniedError:
                     raise
                 except Exception as exc:
@@ -291,12 +338,27 @@ class ModelGateway:
         except TypeError:
             return self.llm_factory(temperature=temperature)
 
-    def _select_model(self, strategy: ModelStrategy) -> str:
+    def _select_model(self, strategy: ModelStrategy, policy: str = "balanced") -> str:
+        if policy == "cheap":
+            return self.low_cost_model
+        if policy == "stable":
+            return self.stable_model
         if strategy in ("route", "classify", "extract"):
             return self.low_cost_model
         if strategy in ("compliance", "evaluate"):
             return self.stable_model
         return self.primary_model
+
+    @staticmethod
+    def _resolve_prompt_version(
+        prompt_id: str,
+        default: str,
+        overrides: dict[str, str],
+    ) -> str:
+        if prompt_id in overrides:
+            return overrides[prompt_id]
+        namespace = prompt_id.split(".", 1)[0]
+        return overrides.get(namespace, overrides.get("*", default))
 
     @staticmethod
     def _is_transient(exc: Exception) -> bool:

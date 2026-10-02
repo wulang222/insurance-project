@@ -18,6 +18,7 @@ from harness.errors import (
     ToolExecutionError,
 )
 from harness.result import ToolResult
+from observability.telemetry import Observability, get_observability
 from tools.base import ToolAuditEvent, ToolCallContext, ToolDefinition
 from tools.registry import ToolRegistry
 
@@ -31,13 +32,20 @@ class ToolGateway:
     normalization, and audit.
     """
 
-    def __init__(self, registry: ToolRegistry, *, max_read_attempts: int = 2) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        *,
+        max_read_attempts: int = 2,
+        observability: Observability | None = None,
+    ) -> None:
         self.registry = registry
         self.max_read_attempts = max_read_attempts
         self.audit_events: list[ToolAuditEvent] = []
         self._call_counts: defaultdict[str, int] = defaultdict(int)
         self._idempotency_cache: dict[tuple[str, str, str], ToolResult] = {}
         self._lock = asyncio.Lock()
+        self.observability = observability or get_observability()
 
     async def execute(
         self,
@@ -52,6 +60,17 @@ class ToolGateway:
         status = "failed"
         attempts = 0
         cache_hit = False
+        span_scope = self.observability.span(
+            f"execute_tool {spec.name}",
+            {
+                "run.id": context.run_id,
+                "user.id_hash": _hash_user(context.user_id),
+                "tool.name": spec.name,
+                "tool.version": spec.version,
+                "tool.risk_level": spec.risk_level,
+            },
+        )
+        span = span_scope.__enter__()
         try:
             # Authentication and authorization are intentionally fail closed.
             if not context.request_id or not context.run_id:
@@ -170,6 +189,14 @@ class ToolGateway:
                     cache_hit=cache_hit,
                 )
             )
+            self.observability.metrics.increment("tool_call_total")
+            if status != "ok":
+                self.observability.metrics.increment("tool_call_failed_total")
+                span.error_type = status
+            span.set_attribute("duration_ms", duration_ms)
+            span.set_attribute("retry_count", max(0, attempts - 1))
+            span.set_attribute("status", status)
+            span_scope.__exit__(None, None, None)
 
     @staticmethod
     async def _invoke(
@@ -204,3 +231,11 @@ class ToolGateway:
         if isinstance(value, list):
             return [ToolGateway._dump(item) for item in value]
         return value
+
+
+def _hash_user(user_id: str | None) -> str | None:
+    if not user_id:
+        return None
+    import hashlib
+
+    return hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:16]

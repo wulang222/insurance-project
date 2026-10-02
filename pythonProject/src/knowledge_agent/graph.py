@@ -30,8 +30,6 @@
   └──────────────────┘
 """
 
-from __future__ import annotations
-
 import logging
 import json
 from typing import Any, Literal
@@ -41,6 +39,7 @@ from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, ConfigDict
 
 from harness.dependencies import AgentDependencies
+from harness.errors import DependencyUnavailableError
 from knowledge_agent.state import KnowledgeAgentState
 from knowledge_agent.tools import (
     rewrite_question,
@@ -365,16 +364,22 @@ def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencie
     ) -> dict:
         if dependencies is None or dependencies.tool_gateway is None:
             return await rag_search_node(state)
-        result = await dependencies.tool_gateway.execute(
-            "retrieve_policy_evidence",
-            {
-                "query": state.get("rewritten_question", ""),
-                "product_ids": [],
-                "top_k": 10,
-            },
-            context=ToolCallContext.from_config(config),
-        )
-        return {"rag_docs": result.data}
+        try:
+            result = await dependencies.tool_gateway.execute(
+                "retrieve_policy_evidence",
+                {
+                    "query": state.get("rewritten_question", ""),
+                    "product_ids": [],
+                    "top_k": 10,
+                },
+                context=ToolCallContext.from_config(config),
+            )
+            return {"rag_docs": result.data}
+        except DependencyUnavailableError:
+            return {
+                "rag_docs": [],
+                "warnings": ["知识库暂不可用，本次未生成无证据答案。"],
+            }
 
     async def governed_answer(
         state: KnowledgeAgentState,

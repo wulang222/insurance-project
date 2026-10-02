@@ -72,3 +72,4 @@ class InsuranceAgentState(TypedDict, total=False):
     interrupt_reason: str
     profile_source: str
     stored_profile: dict
+    warnings: list[str]

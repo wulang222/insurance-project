@@ -99,7 +99,7 @@ def build_tool_registry(
                     request_id=context.request_id,
                     run_id=context.run_id,
                     user_id=context.user_id,
-                    max_model_calls=12,
+                    max_model_calls=context.max_model_calls,
                 ),
             )
             return result.data

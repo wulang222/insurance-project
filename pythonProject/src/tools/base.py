@@ -33,7 +33,8 @@ class ToolCallContext(BaseModel):
     user_id: str | None = None
     scopes: frozenset[str] = Field(default_factory=frozenset)
     approved: bool = False
-    max_tool_calls: int = Field(default=20, ge=1)
+    max_tool_calls: int = Field(default=12, ge=0)
+    max_model_calls: int = Field(default=8, ge=0)
     idempotency_key: str | None = None
 
     @classmethod
@@ -45,7 +46,8 @@ class ToolCallContext(BaseModel):
             user_id=values.get("user_id"),
             scopes=frozenset(values.get("scopes", ())),
             approved=bool(values.get("approved", False)),
-            max_tool_calls=int(values.get("max_tool_calls", 20)),
+            max_tool_calls=int(values.get("max_tool_calls", 12)),
+            max_model_calls=int(values.get("max_model_calls", 8)),
             idempotency_key=values.get("idempotency_key"),
         )
 

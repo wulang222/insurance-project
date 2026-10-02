@@ -10,8 +10,6 @@ Workflow:
 6. [NEW] Save user profile to Store (跨会话记忆)
 """
 
-from __future__ import annotations
-
 import json
 import logging
 from typing import Any, Literal
@@ -21,6 +19,7 @@ from langgraph.graph import StateGraph, END
 from langgraph.types import interrupt
 
 from harness.dependencies import AgentDependencies
+from harness.errors import DependencyUnavailableError
 from insurance_agent.state import (
     InsuranceAgentState,
     REQUIRED_FIELDS,
@@ -287,19 +286,22 @@ async def enrich_products_node(
         )
 
     if dependencies is not None and dependencies.tool_gateway is not None:
-        evidence_result = await dependencies.tool_gateway.execute(
-            "retrieve_policy_evidence",
-            {
-                "query": (
-                    f"{profile.insurance_type} {profile.age}岁 {profile.occupation} "
-                    "保障范围 理赔规则 免责条款"
-                ),
-                "product_ids": product_ids,
-                "top_k": 10,
-            },
-            context=ToolCallContext.from_config(config),
-        )
-        evidence = evidence_result.data
+        try:
+            evidence_result = await dependencies.tool_gateway.execute(
+                "retrieve_policy_evidence",
+                {
+                    "query": (
+                        f"{profile.insurance_type} {profile.age}岁 {profile.occupation} "
+                        "保障范围 理赔规则 免责条款"
+                    ),
+                    "product_ids": product_ids,
+                    "top_k": 10,
+                },
+                context=ToolCallContext.from_config(config),
+            )
+            evidence = evidence_result.data
+        except DependencyUnavailableError:
+            evidence = []
         enriched = [
             {
                 "product_id": product_id,
@@ -311,13 +313,17 @@ async def enrich_products_node(
             }
             for product_id in product_ids
         ]
+        warnings = [] if evidence else ["条款知识库暂不可用，推荐仅依据在售产品结构化数据。"]
     else:
         enriched = rag_enrich_products.invoke(invoke_args)
     rag_map = {e["product_id"]: e["rag_content"] for e in enriched}
     for product in matched_products:
         product["rag_content"] = rag_map.get(product["product_id"], "")
 
-    return {"enriched_products": matched_products}
+    result = {"enriched_products": matched_products}
+    if dependencies is not None and dependencies.tool_gateway is not None:
+        result["warnings"] = warnings
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -470,7 +476,7 @@ def after_load_profile(state: InsuranceAgentState) -> Literal["validate_profile"
     return "extract_profile"
 
 
-def should_query_products(state: InsuranceAgentState) -> Literal["query_products", END]:
+def should_query_products(state: InsuranceAgentState) -> str:
     """If profile is valid, proceed to query; otherwise end."""
     profile = state.get("user_profile")
     if profile is None:

@@ -32,3 +32,4 @@ class KnowledgeAgentState(TypedDict, total=False):
     db_results: list[dict]
     rag_docs: list[dict]
     final_answer: str
+    warnings: list[str]

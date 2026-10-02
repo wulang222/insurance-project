@@ -159,8 +159,8 @@ class RunManager:
                     "crm:read",
                     "memory:write",
                 ],
-                "max_tool_calls": 20,
-                "max_model_calls": 12,
+                "max_tool_calls": record.context.max_tool_calls,
+                "max_model_calls": record.context.max_model_calls,
             }
         }
         if record.context.user_id:
@@ -231,6 +231,7 @@ class RunManager:
             handled_by=self._handled_by(data),
             structured_data=structured_data,
             citations=citations,
+            warnings=[str(item) for item in data.get("warnings", [])],
             trace=self._trace(record),
         )
 

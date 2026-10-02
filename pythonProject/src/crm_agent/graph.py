@@ -11,8 +11,6 @@ CRM Agent — LangGraph 工作流
 简化设计：线性流程，无复杂分支，便于维护和演示
 """
 
-from __future__ import annotations
-
 import json
 import logging
 

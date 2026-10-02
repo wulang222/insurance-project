@@ -80,5 +80,17 @@ include = ["**/*.py"]
 from = "src/api"
 include = ["**/*.py"]
 
+[[tool.uv.build-backend.packages]]
+from = "src/middleware"
+include = ["**/*.py"]
+
+[[tool.uv.build-backend.packages]]
+from = "src/tools"
+include = ["**/*.py"]
+
+[[tool.uv.build-backend.packages]]
+from = "src/prompts"
+include = ["**/*.py", "**/*.json"]
+
 [tool.ruff]
 target-version = "py313"

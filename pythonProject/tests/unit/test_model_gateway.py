@@ -69,6 +69,7 @@ async def test_bad_json_is_repaired_exactly_once() -> None:
     assert model.calls == 2
     assert gateway.audit_events[-1].prompt_version == "v1"
     assert gateway.audit_events[-1].input_tokens == 10
+    assert gateway.audit_events[-1].output_tokens == 6
 
 
 @pytest.mark.asyncio
@@ -84,3 +85,39 @@ async def test_model_budget_ends_run_before_provider_call() -> None:
     with pytest.raises(PolicyDeniedError, match="budget"):
         await gateway.invoke(request, context=context(limit=1))
     assert model.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_recommendation_uses_primary_then_fallback_on_transient_failure() -> None:
+    created: list[str] = []
+
+    class FailingModel:
+        async def ainvoke(self, prompt: str) -> Response:
+            del prompt
+            raise OSError("temporary network failure")
+
+    fallback = SequenceModel(["safe answer"])
+
+    def factory(*, model: str, temperature: float):
+        del temperature
+        created.append(model)
+        return FailingModel() if model == "primary" else fallback
+
+    gateway = ModelGateway(
+        factory,
+        registry(),
+        primary_model="primary",
+        fallback_model="fallback",
+        max_retries=0,
+    )
+    result = await gateway.invoke(
+        ModelRequest(
+            prompt_id="test.route",
+            variables={"question": "recommend"},
+            strategy="recommend",
+        ),
+        context=context(),
+    )
+    assert result.data == "safe answer"
+    assert result.fallback_used is True
+    assert created == ["primary", "fallback"]

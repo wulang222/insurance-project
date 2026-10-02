@@ -1,6 +1,6 @@
 # Insurance Agent Platform
 
-Python Agent 服务的主入口是 `supervisor_agent`：它保留现有路由行为，将请求分发给保险推荐、知识问答或 CRM 分析 Agent。`src/harness` 定义后续重构共用的运行协议，Day 1 不改变现有业务流程。
+Python Agent 服务的主入口是 `supervisor_agent`：它将请求分发给保险推荐、知识问答或 CRM 分析 Agent。正式 FastAPI 入口通过持久化 Harness 运行，并统一治理模型、工具与版本化 Prompt。
 
 ## 环境
 
@@ -63,6 +63,21 @@ Day 2 持久化与恢复测试：
 uv run python -m pytest tests/integration -q
 ```
 
+Day 3 Gateway 与 Prompt Registry 验收：
+
+```bash
+uv run python -m pytest \
+  tests/unit/test_tool_gateway.py \
+  tests/unit/test_model_gateway.py \
+  tests/unit/test_prompt_registry.py \
+  tests/integration/test_tool_timeout_retry.py \
+  tests/integration/test_tool_permission.py -q
+```
+
+正式业务链路必须从 FastAPI lifespan 注入 `ModelGateway`、`ToolGateway` 和
+`PromptRegistry`。模块级 graph 仅保留给 LangGraph 本地开发与旧测试适配，不能作为
+正式 HTTP 运行入口。Fake Repository 只能在测试或显式开发配置中创建。
+
 Contract 测试会 mock LLM、MySQL 和 Milvus，不依赖外部服务。需要显式运行供应商集成测试时，设置 `RUN_EXTERNAL_INTEGRATION_TESTS=true`。
 
 ## 目录入口
@@ -73,6 +88,9 @@ Contract 测试会 mock LLM、MySQL 和 Milvus，不依赖外部服务。需要�
 - `src/knowledge_agent/`：DB + Milvus 知识问答
 - `src/crm_agent/`：CRM 分析
 - `src/harness/`：统一运行类型、错误和依赖容器
+- `src/middleware/`：模型与工具的超时、重试、预算、权限、脱敏和审计
+- `src/tools/`：Pydantic 工具契约与显式 Repository 适配器
+- `src/prompts/`：可版本化、可哈希、可回归的 Prompt Registry
 - `src/vectorizer/`：文档向量化到 Milvus
 
 `simple_agent` 仅作为早期示例保留，不是项目主入口；`langchain-anthropic` 也仅由该示例使用。

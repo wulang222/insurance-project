@@ -33,7 +33,7 @@ class ModelCallContext(BaseModel):
     request_id: str = Field(min_length=1)
     run_id: str = Field(min_length=1)
     user_id: str | None = None
-    max_model_calls: int = Field(default=12, ge=1)
+    max_model_calls: int = Field(default=8, ge=0)
 
     @classmethod
     def from_config(cls, config: dict[str, Any] | None) -> "ModelCallContext":
@@ -42,7 +42,7 @@ class ModelCallContext(BaseModel):
             request_id=str(values.get("request_id", "local-request")),
             run_id=str(values.get("run_id", values.get("thread_id", "local-run"))),
             user_id=values.get("user_id"),
-            max_model_calls=int(values.get("max_model_calls", 12)),
+            max_model_calls=int(values.get("max_model_calls", 8)),
         )
 
 
@@ -110,6 +110,8 @@ class ModelGateway:
         *,
         primary_model: str | None = None,
         fallback_model: str | None = None,
+        low_cost_model: str | None = None,
+        stable_model: str | None = None,
         max_retries: int = 2,
         base_backoff_seconds: float = 0.05,
     ) -> None:
@@ -117,6 +119,8 @@ class ModelGateway:
         self.prompt_registry = prompt_registry
         self.primary_model = primary_model or os.getenv("MODEL_PRIMARY", "qwen3.7-plus")
         self.fallback_model = fallback_model or os.getenv("MODEL_FALLBACK", "qwen-plus")
+        self.low_cost_model = low_cost_model or os.getenv("MODEL_LOW_COST", self.fallback_model)
+        self.stable_model = stable_model or os.getenv("MODEL_STABLE", self.primary_model)
         self.max_retries = max_retries
         self.base_backoff_seconds = base_backoff_seconds
         self.audit_events: list[ModelAuditEvent] = []
@@ -129,14 +133,15 @@ class ModelGateway:
         *,
         context: ModelCallContext,
     ) -> ModelResult:
+        safe_variables = self._redact_prompt_variables(request.variables)
         rendered = self.prompt_registry.render(
             request.prompt_id,
             request.prompt_version,
-            request.variables,
+            safe_variables,
         )
         started = time.perf_counter()
         status = "failed"
-        model_name = self.primary_model
+        model_name = self._select_model(request.strategy)
         input_tokens = self._estimate_tokens(rendered.text)
         output_tokens = 0
         repaired = False
@@ -151,7 +156,7 @@ class ModelGateway:
             input_tokens, output_tokens = self._usage(response, rendered.text, raw_text)
             try:
                 data = self._validate_output(raw_text, request.response_model)
-            except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+            except (json.JSONDecodeError, ValidationError, ValueError):
                 if request.response_model is str:
                     raise
                 repaired = True
@@ -168,8 +173,9 @@ class ModelGateway:
                 )
                 fallback_used = fallback_used or repair_fallback
                 raw_text = self._response_text(repair_response)
-                repair_in, output_tokens = self._usage(repair_response, repair_text, raw_text)
+                repair_in, repair_out = self._usage(repair_response, repair_text, raw_text)
                 input_tokens += repair_in
+                output_tokens += repair_out
                 try:
                     data = self._validate_output(raw_text, request.response_model)
                 except (json.JSONDecodeError, ValidationError, ValueError) as repair_exc:
@@ -178,7 +184,7 @@ class ModelGateway:
                         "model output remained invalid after one repair",
                         details={"prompt_id": request.prompt_id},
                     ) from repair_exc
-                del exc
+            self._compliance_precheck(raw_text)
 
             status = "ok"
             duration_ms = max(0, int((time.perf_counter() - started) * 1000))
@@ -234,9 +240,15 @@ class ModelGateway:
         context: ModelCallContext,
     ) -> tuple[Any, str, bool]:
         last_error: Exception | None = None
-        models = [self.primary_model]
-        if self.fallback_model != self.primary_model:
-            models.append(self.fallback_model)
+        selected_model = self._select_model(request.strategy)
+        models = [selected_model]
+        fallback_candidate = (
+            self.fallback_model
+            if self.fallback_model != selected_model
+            else self.primary_model
+        )
+        if fallback_candidate != selected_model:
+            models.append(fallback_candidate)
         for model_index, model_name in enumerate(models):
             for retry in range(self.max_retries + 1):
                 await self._consume_budget(context)
@@ -249,7 +261,9 @@ class ModelGateway:
                     return response, model_name, model_index > 0
                 except PolicyDeniedError:
                     raise
-                except (TimeoutError, OSError, ConnectionError) as exc:
+                except Exception as exc:
+                    if not self._is_transient(exc):
+                        raise
                     last_error = exc
                     if retry < self.max_retries:
                         await asyncio.sleep(self.base_backoff_seconds * (2**retry))
@@ -276,6 +290,20 @@ class ModelGateway:
             return self.llm_factory(model=model_name, temperature=temperature)
         except TypeError:
             return self.llm_factory(temperature=temperature)
+
+    def _select_model(self, strategy: ModelStrategy) -> str:
+        if strategy in ("route", "classify", "extract"):
+            return self.low_cost_model
+        if strategy in ("compliance", "evaluate"):
+            return self.stable_model
+        return self.primary_model
+
+    @staticmethod
+    def _is_transient(exc: Exception) -> bool:
+        if isinstance(exc, (TimeoutError, OSError, ConnectionError)):
+            return True
+        status_code = getattr(exc, "status_code", None)
+        return status_code == 429 or (isinstance(status_code, int) and status_code >= 500)
 
     @staticmethod
     async def _invoke_model(llm: Any, prompt: str) -> Any:
@@ -337,3 +365,23 @@ class ModelGateway:
             return TypeAdapter(response_model).json_schema()
         except Exception:
             return {"type": "object"}
+
+    @classmethod
+    def _redact_prompt_variables(cls, value: Any, key: str = "") -> Any:
+        secret_keys = {"password", "token", "api_key", "id_card", "phone", "mobile"}
+        if key.lower() in secret_keys:
+            return "***REDACTED***"
+        if isinstance(value, dict):
+            return {item_key: cls._redact_prompt_variables(item, item_key) for item_key, item in value.items()}
+        if isinstance(value, list):
+            return [cls._redact_prompt_variables(item) for item in value]
+        if isinstance(value, str):
+            value = re.sub(r"(?<!\d)1[3-9]\d{9}(?!\d)", "***PHONE***", value)
+            return re.sub(r"(?<!\d)\d{17}[0-9Xx](?!\d)", "***ID***", value)
+        return value
+
+    @staticmethod
+    def _compliance_precheck(raw_text: str) -> None:
+        # Fail closed if a provider leaks credential-like material into an answer.
+        if re.search(r"(?:api[_-]?key|password)\s*[:=]\s*\S+", raw_text, re.IGNORECASE):
+            raise InvalidAgentOutputError("model output failed compliance precheck")

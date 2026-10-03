@@ -34,7 +34,8 @@ UPDATE config_info SET data_id = 'insurance-portal-dev.yaml'  WHERE data_id = 'b
 -- -----------------------------------------------------------------------------
 UPDATE config_info SET content = REPLACE(content, 'com.bitejiuyeke', 'com.insurance') WHERE content LIKE '%bitejiuyeke%';
 UPDATE config_info SET content = REPLACE(content, 'Bite', 'Insurance')                  WHERE content LIKE '%Bite%';
-UPDATE config_info SET content = REPLACE(content, 'bite@123', 'insurance@123')        WHERE content LIKE '%bite@123%';
+-- 密码迁移由部署环境的 Secret 管理器执行，禁止在迁移脚本中保存明文凭据。
+UPDATE config_info SET content = REPLACE(content, '__OLD_PASSWORD__', '__NEW_PASSWORD__') WHERE content LIKE '%__OLD_PASSWORD__%';
 UPDATE config_info SET content = REPLACE(content, 'bitejiuyeke', 'insurance')         WHERE content LIKE '%bitejiuyeke%';
 UPDATE config_info SET content = REPLACE(content, 'bite-', 'insurance-')              WHERE content LIKE '%bite-%';
 UPDATE config_info SET content = REPLACE(content, 'lb://bite-', 'lb://insurance-')    WHERE content LIKE '%lb://bite-%';

@@ -7,9 +7,13 @@
         Insurance Chat
       </div>
       <div class="nav-links">
-        <a href="#" class="nav-link">产品介绍</a>
-        <a href="#" class="nav-link">解决方案</a>
-        <a href="#" class="nav-link">文档</a>
+        <a href="#capabilities" class="nav-link">核心能力</a>
+        <a
+          href="https://github.com/wulang222/insurance-project#readme"
+          class="nav-link"
+          target="_blank"
+          rel="noreferrer"
+        >项目文档</a>
         <button v-if="!userStore.isLoggedIn" class="btn-login-sm" @click="$router.push('/login')">
           登录
         </button>
@@ -43,7 +47,7 @@
       </button>
 
       <!-- Features -->
-      <div class="features">
+      <div id="capabilities" class="features">
         <div class="feature-card">
           <div class="icon">🧠</div>
           <div class="title">智能问答</div>

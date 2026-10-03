@@ -66,3 +66,32 @@ def test_legacy_chat_response_shape(
     assert payload["handled_by"] == "knowledge_agent"
     assert payload["route"] == "knowledge_agent"
     assert payload["route_reason"] == "contract-test stub"
+    assert set(payload) == {
+        "session_id",
+        "message_id",
+        "content",
+        "handled_by",
+        "route",
+        "route_reason",
+    }
+
+
+def test_chat_stream_emits_standard_stage_and_result_events(
+    mocked_external_services: object,
+) -> None:
+    app = server.create_app(lifespan=fake_lifespan)
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/chat/stream",
+            json={"session_id": "session-1", "user_id": "user-1", "message": "你好"},
+        )
+
+    assert response.status_code == 200
+    assert "event: run.started" in response.text
+    assert "event: route.selected" in response.text
+    assert "event: agent.completed" in response.text
+    assert "event: run.completed" in response.text
+    assert "event: run.result" in response.text
+    assert "event: done" in response.text
+    assert '"answer": "您好，请问您想了解哪类保险问题？"' in response.text

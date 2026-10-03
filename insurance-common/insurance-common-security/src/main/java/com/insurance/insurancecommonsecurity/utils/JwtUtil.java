@@ -1,7 +1,6 @@
 package com.insurance.insurancecommonsecurity.utils;
 
 import com.insurance.insurancecommondomain.constants.SecurityConstants;
-import com.insurance.insurancecommondomain.constants.TokenConstants;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -16,7 +15,13 @@ public class JwtUtil {
     /**
      * 令牌密钥
      */
-    public static String secret = TokenConstants.SECRET;
+    private static String secret() {
+        String secret = System.getenv("JWT_SECRET");
+        if (secret == null || secret.length() < 32) {
+            throw new IllegalStateException("JWT_SECRET must contain at least 32 characters");
+        }
+        return secret;
+    }
 
     /**
      * 从原始数据声明生成令牌
@@ -24,7 +29,8 @@ public class JwtUtil {
      * @return 令牌
      */
     public static String createToken(Map<String, Object> claims) {
-        return Jwts.builder().setClaims(claims).signWith(SignatureAlgorithm.HS512, secret).compact();
+        return Jwts.builder().setClaims(claims)
+                .signWith(SignatureAlgorithm.HS512, secret()).compact();
     }
 
     /**
@@ -33,7 +39,7 @@ public class JwtUtil {
      * @return 数据声明
      */
     public static Claims parseToken(String token) {
-        return Jwts.parser().setSigningKey(secret).parseClaimsJws(token).getBody();
+        return Jwts.parser().setSigningKey(secret()).parseClaimsJws(token).getBody();
     }
 
     /**

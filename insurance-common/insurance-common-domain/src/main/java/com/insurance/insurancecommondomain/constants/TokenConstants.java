@@ -6,11 +6,6 @@ package com.insurance.insurancecommondomain.constants;
 public class TokenConstants {
 
     /**
-     * 令牌的秘钥
-     */
-    public final static String SECRET = "insuranceabcdefghijklmnopqrstuvwxyz";
-
-    /**
      * 令牌前缀
      */
     public final static String PREFIX = "Bearer ";

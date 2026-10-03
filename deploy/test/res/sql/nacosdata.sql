@@ -26,13 +26,13 @@ feign:
     redis:
       host: 192.168.56.107
       port: 6379
-      password: insurance@123','2f99b238a0dc181c2cca4c1c7e5cf738',now(),now(),'nacos','172.19.0.1','通用Redis公共配置','insurance-test','','','','yaml','',''),
+      password: ${REDIS_PASSWORD:}','2f99b238a0dc181c2cca4c1c7e5cf738',now(),now(),'nacos','172.19.0.1','通用Redis公共配置','insurance-test','','','','yaml','',''),
                                                                                                                                                                              ('share-mysql-dev.yaml','DEFAULT_GROUP','spring:
   datasource:
     url: jdbc:mysql://192.168.56.107:3306/insurance_test?useSSL=false&autoReconnect=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&serverTimezone=GMT%2B8
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: insurancedev
-    password: insurance@123
+    password: ${MYSQL_PASSWORD:}
     # 指定为HikariDataSource
     type: com.zaxxer.hikari.HikariDataSource
     # hikari连接池配置
@@ -140,7 +140,7 @@ appuser:
     host: 192.168.56.107
     virtual-host: /
     username: admin
-    password: insurance@123','547905b9da54726573f9a12a50202260',now(),now(),'nacos','112.46.64.96','通用rabbitmq公共配置','insurance-test','
+    password: ${RABBITMQ_PASSWORD:}','547905b9da54726573f9a12a50202260',now(),now(),'nacos','112.46.64.96','通用rabbitmq公共配置','insurance-test','
 ','','','yaml','',''),
                                                                                                                                                                              ('insurance-file-dev.yaml','DEFAULT_GROUP','storage:
   type: oss
@@ -168,7 +168,7 @@ spring:
 wx:
   applet:
     app-id: wxced773bb27a21222
-    app-secret: 21d9bf91f89d410868dde7f0b7226433','654d56916263537e391277d77bd8604f',now(),now(),'nacos','112.46.64.96','门户首页服务','insurance-test',NULL,NULL,NULL,'yaml',NULL,'');
+    app-secret: ${WX_APP_SECRET:}','654d56916263537e391277d77bd8604f',now(),now(),'nacos','112.46.64.96','门户首页服务','insurance-test',NULL,NULL,NULL,'yaml',NULL,'');
 INSERT INTO config_info (data_id,group_id,content,md5,gmt_create,gmt_modified,src_user,src_ip,app_name,tenant_id,c_desc,c_use,effect,`type`,c_schema,encrypted_data_key) VALUES
     ('share-caffeine-dev.yaml','DEFAULT_GROUP','caffeine:
   build:

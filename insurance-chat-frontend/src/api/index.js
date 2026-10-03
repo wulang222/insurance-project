@@ -6,15 +6,17 @@
  */
 import axios from 'axios'
 
+const API_BASE_URL = import.meta.env.DEV ? '' : 'http://127.0.0.1:18080'
+
 const api = axios.create({
-  baseURL: import.meta.env.DEV ? '' : 'http://127.0.0.1:18080',
+  baseURL: API_BASE_URL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' }
 })
 
 // 请求拦截器：自动携带 token
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('token')
+  const token = getStoredToken()
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`
   }
@@ -32,8 +34,7 @@ api.interceptors.response.use(
   },
   error => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('user')
+      clearStoredSession()
       window.location.href = '/login'
     }
     return Promise.reject(error)
@@ -106,11 +107,93 @@ export function queryMessages(data) {
 
 /** 流式发送消息 — 返回 EventSource URL */
 export function getStreamUrl(data) {
-  const token = localStorage.getItem('token')
+  const token = getStoredToken()
   return {
     url: '/portal/chat/send/stream',
     token,
     body: data
+  }
+}
+
+/**
+ * 使用 fetch + ReadableStream 消费 POST SSE，保留后端标准事件名和数据结构。
+ */
+export async function streamMessage(data, { signal, onEvent }) {
+  const token = getStoredToken()
+  const response = await fetch(`${API_BASE_URL}/portal/chat/send/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {})
+    },
+    body: JSON.stringify(data),
+    signal
+  })
+
+  if (response.status === 401) {
+    clearStoredSession()
+    window.location.assign('/login')
+    throw new Error('登录状态已失效')
+  }
+  if (!response.ok || !response.body) {
+    throw new Error('AI 服务暂时不可用')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
+    const blocks = buffer.split(/\r?\n\r?\n/)
+    buffer = blocks.pop() || ''
+    for (const block of blocks) {
+      const event = parseSseBlock(block)
+      if (event) onEvent(event)
+    }
+    if (done) break
+  }
+
+  const trailing = parseSseBlock(buffer)
+  if (trailing) onEvent(trailing)
+}
+
+function parseSseBlock(block) {
+  if (!block.trim()) return null
+  let type = 'message'
+  let id = ''
+  const dataLines = []
+  for (const line of block.split(/\r?\n/)) {
+    if (line.startsWith('event:')) type = line.slice(6).trim()
+    else if (line.startsWith('id:')) id = line.slice(3).trim()
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart())
+  }
+  if (dataLines.length === 0) return null
+  const raw = dataLines.join('\n')
+  let payload = raw
+  try {
+    payload = JSON.parse(raw)
+  } catch {
+    // SSE permits text payloads; callers receive them unchanged.
+  }
+  return { type, id, data: payload }
+}
+
+function getStoredToken() {
+  try {
+    return localStorage.getItem('token')
+  } catch {
+    return null
+  }
+}
+
+function clearStoredSession() {
+  try {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+  } catch {
+    // Private browsing/storage denial should not block re-authentication.
   }
 }
 

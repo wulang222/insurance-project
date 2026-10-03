@@ -3,4 +3,4 @@
 vm1ip=192.168.56.107
 vm2ip=你的云服务器2内网ip/你的虚拟机2内网ip
 
-redis-cli --cluster create ${vm1ip}:6380 ${vm1ip}:6381 ${vm1ip}:6382 ${vm2ip}:6383 ${vm2ip}:6384 ${vm2ip}:6385 --cluster-replicas 1 -a insurance@123 --cluster-yes
+redis-cli --cluster create ${vm1ip}:6380 ${vm1ip}:6381 ${vm1ip}:6382 ${vm2ip}:6383 ${vm2ip}:6384 ${vm2ip}:6385 --cluster-replicas 1 -a "${REDIS_PASSWORD:?Set REDIS_PASSWORD}" --cluster-yes

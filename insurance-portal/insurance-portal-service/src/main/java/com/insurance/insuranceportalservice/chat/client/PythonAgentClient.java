@@ -1,6 +1,7 @@
 package com.insurance.insuranceportalservice.chat.client;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -16,8 +17,10 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 /**
  * Python Agent HTTP 客户端
@@ -53,34 +56,26 @@ public class PythonAgentClient {
     }
 
     @Data
-    public static class ChatResponse {
-        @JsonProperty("session_id")
-        private String sessionId;
-        @JsonProperty("message_id")
-        private String messageId;
-        private String content;
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class RunResponse {
+        @JsonProperty("request_id")
+        private String requestId;
+        @JsonProperty("run_id")
+        private String runId;
+        @JsonProperty("thread_id")
+        private String threadId;
+        private String status;
+        private String answer;
         @JsonProperty("handled_by")
-        private String handledBy;
-        private String route;
-        @JsonProperty("route_reason")
-        private String routeReason;
-        private String error;
-    }
-
-    @Data
-    public static class StreamDelta {
-        @JsonProperty("session_id")
-        private String sessionId;
-        @JsonProperty("message_id")
-        private String messageId;
-        private String delta;
-        @JsonProperty("handled_by")
-        private String handledBy;
-        private String route;
-        @JsonProperty("route_reason")
-        private String routeReason;
-        private boolean done;
-        private String error;
+        private List<String> handledBy;
+        @JsonProperty("structured_data")
+        private Map<String, Object> structuredData;
+        private List<Map<String, Object>> citations;
+        @JsonProperty("required_input")
+        private Map<String, Object> requiredInput;
+        private List<String> warnings;
+        private Map<String, Object> trace;
+        private Map<String, Object> error;
     }
 
     // ==================== 同步调用 ====================
@@ -93,13 +88,13 @@ public class PythonAgentClient {
      * @param message   用户消息
      * @return AI回复
      */
-    public String sendMessage(String sessionId, String userId, String message) {
-        String url = pythonBaseUrl + "/chat";
+    public RunResponse sendMessage(String sessionId, String userId, String message) {
+        String url = pythonBaseUrl + "/v1/runs";
         log.info("调用Python AI服务: url={}, sessionId={}", url, sessionId);
 
         try {
             Map<String, Object> body = new HashMap<>();
-            body.put("session_id", sessionId != null ? sessionId : "");
+            body.put("thread_id", sessionId != null ? sessionId : "");
             body.put("user_id", userId != null ? userId : "");
             body.put("message", message);
 
@@ -107,23 +102,16 @@ public class PythonAgentClient {
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
-            ResponseEntity<Map> response = restTemplate.postForEntity(url, request, Map.class);
-
+            ResponseEntity<RunResponse> response = restTemplate.postForEntity(
+                    url, request, RunResponse.class);
             if (response.getBody() != null) {
-                Object content = response.getBody().get("content");
-                if (content != null) {
-                    return content.toString();
-                }
-                Object error = response.getBody().get("error");
-                if (error != null) {
-                    log.error("Python AI服务返回错误: {}", error);
-                    return "AI服务暂不可用，请稍后重试。";
-                }
+                return response.getBody();
             }
-            return "AI服务返回为空，请稍后重试。";
+            return failedResponse(sessionId, "AI服务返回为空，请稍后重试。");
         } catch (Exception e) {
-            log.error("调用Python AI服务失败: url={}, error={}", url, e.getMessage(), e);
-            return "您好！AI服务暂时无法连接，请稍后重试。\n\n（提示：请确保 Python AI Server 已启动在 " + pythonBaseUrl + "）";
+            log.error("调用Python AI服务失败: url={}, type={}", url,
+                    e.getClass().getSimpleName());
+            return failedResponse(sessionId, "AI服务暂时无法连接，请稍后重试。");
         }
     }
 
@@ -137,7 +125,8 @@ public class PythonAgentClient {
      * @param message   用户消息
      * @return SseEmitter 流式响应
      */
-    public SseEmitter sendMessageStream(String sessionId, String userId, String message) {
+    public SseEmitter sendMessageStream(String sessionId, String userId, String message,
+                                        Consumer<RunResponse> resultConsumer) {
         SseEmitter emitter = new SseEmitter(300000L); // 5分钟超时
 
         CompletableFuture.runAsync(() -> {
@@ -176,42 +165,56 @@ public class PythonAgentClient {
                 try (BufferedReader reader = new BufferedReader(
                         new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
+                    String eventName = "message";
+                    String eventId = null;
                     StringBuilder dataBuffer = new StringBuilder();
                     while ((line = reader.readLine()) != null) {
-                        if (line.startsWith("data: ")) {
-                            String data = line.substring(6);
-                            StreamDelta delta = objectMapper.readValue(data, StreamDelta.class);
-
-                            if (delta.getError() != null) {
-                                emitter.completeWithError(new RuntimeException(delta.getError()));
-                                return;
-                            }
-
-                            if (delta.isDone()) {
-                                // 发送完成事件
+                        if (line.isEmpty()) {
+                            if (dataBuffer.length() > 0) {
+                                String data = dataBuffer.toString();
                                 SseEmitter.SseEventBuilder event = SseEmitter.event()
-                                        .name("done")
-                                        .data(objectMapper.writeValueAsString(delta));
+                                        .name(eventName)
+                                        .data(data);
+                                if (eventId != null) {
+                                    event.id(eventId);
+                                }
                                 emitter.send(event);
-                                emitter.complete();
-                                return;
+                                if ("run.result".equals(eventName)) {
+                                    resultConsumer.accept(objectMapper.readValue(data, RunResponse.class));
+                                }
+                                if ("done".equals(eventName)) {
+                                    emitter.complete();
+                                    return;
+                                }
                             }
-
-                            // 发送增量内容
-                            SseEmitter.SseEventBuilder event = SseEmitter.event()
-                                    .name("delta")
-                                    .data(objectMapper.writeValueAsString(delta));
-                            emitter.send(event);
+                            eventName = "message";
+                            eventId = null;
+                            dataBuffer.setLength(0);
+                        } else if (line.startsWith("event:")) {
+                            eventName = line.substring(6).trim();
+                        } else if (line.startsWith("id:")) {
+                            eventId = line.substring(3).trim();
+                        } else if (line.startsWith("data:")) {
+                            if (dataBuffer.length() > 0) {
+                                dataBuffer.append('\n');
+                            }
+                            dataBuffer.append(line.substring(5).trim());
                         }
                     }
                 }
                 emitter.complete();
             } catch (Exception e) {
-                log.error("流式调用Python AI服务失败", e);
+                log.error("流式调用Python AI服务失败: type={}",
+                        e.getClass().getSimpleName());
                 try {
+                    RunResponse failed = failedResponse(sessionId, "AI服务暂时无法连接，请稍后重试。");
+                    resultConsumer.accept(failed);
                     SseEmitter.SseEventBuilder errorEvent = SseEmitter.event()
-                            .name("error")
-                            .data("{\"error\": \"" + e.getMessage() + "\"}");
+                            .name("run.failed")
+                            .data(objectMapper.writeValueAsString(Map.of(
+                                    "status", "failed",
+                                    "message", failed.getAnswer()
+                            )));
                     emitter.send(errorEvent);
                 } catch (Exception ignored) {}
                 emitter.completeWithError(e);
@@ -223,6 +226,20 @@ public class PythonAgentClient {
         });
 
         return emitter;
+    }
+
+    private RunResponse failedResponse(String threadId, String answer) {
+        RunResponse response = new RunResponse();
+        response.setRunId("");
+        response.setThreadId(threadId);
+        response.setStatus("failed");
+        response.setAnswer(answer);
+        response.setHandledBy(List.of());
+        response.setCitations(List.of());
+        response.setWarnings(List.of("AI 服务不可用，未生成保险建议。"));
+        response.setTrace(Map.of());
+        response.setError(Map.of("code", "AI_SERVICE_UNAVAILABLE"));
+        return response;
     }
 
     /**

@@ -4,6 +4,7 @@ import com.insurance.insuranceportalservice.chat.entity.dto.QueryMessagesDTO;
 import com.insurance.insuranceportalservice.chat.entity.dto.SendMessageDTO;
 import com.insurance.insuranceportalservice.chat.entity.vo.ChatMessageVO;
 import com.insurance.insuranceportalservice.chat.entity.vo.ChatSessionVO;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -39,6 +40,11 @@ public interface IChatService {
      * @return AI回复消息
      */
     ChatMessageVO sendMessage(SendMessageDTO sendMessageDTO, Long userId);
+
+    /**
+     * 流式发送消息，并在收到标准 run.result 事件后持久化完整元数据。
+     */
+    SseEmitter sendMessageStream(SendMessageDTO sendMessageDTO, Long userId);
 
     /**
      * 删除会话（逻辑删除）

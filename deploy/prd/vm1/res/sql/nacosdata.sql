@@ -24,7 +24,7 @@ feign:
     type: redis
   data:
     redis:
-      password: insurance@123
+      password: ${REDIS_PASSWORD:}
       lettuce:
         pool:
           max-active: 50
@@ -41,7 +41,7 @@ feign:
     url: jdbc:mysql://192.168.56.107:3308/insurance_prd?useSSL=false&autoReconnect=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&serverTimezone=GMT%2B8
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: insurancedev
-    password: insurance@123
+    password: ${MYSQL_PASSWORD:}
     # 指定为HikariDataSource
     type: com.zaxxer.hikari.HikariDataSource
     # hikari连接池配置
@@ -148,7 +148,7 @@ appuser:
     addresses: 192.168.56.107:5673,你的云服务器2内网ip/你的虚拟机2内网ip:5673
     virtual-host: /
     username: admin
-    password: insurance@123','c1dfdc9fdd7d50cee9d1d53b70bca94e',now(),now(),'nacos','222.91.199.193','通用rabbitmq公共配置','insurance-prd','
+    password: ${RABBITMQ_PASSWORD:}','c1dfdc9fdd7d50cee9d1d53b70bca94e',now(),now(),'nacos','222.91.199.193','通用rabbitmq公共配置','insurance-prd','
 ','','','yaml','',''),
                                                                                                                                                                              ('insurance-file-prd.yaml','DEFAULT_GROUP','storage:
   type: oss
@@ -175,7 +175,7 @@ spring:
 wx:
   applet:
     app-id: wxced773bb27a21222
-    app-secret: 21d9bf91f89d410868dde7f0b7226433','654d56916263537e391277d77bd8604f',now(),now(),'nacos','112.46.64.96','门户首页服务','insurance-prd',NULL,NULL,NULL,'yaml',NULL,'');
+    app-secret: ${WX_APP_SECRET:}','654d56916263537e391277d77bd8604f',now(),now(),'nacos','112.46.64.96','门户首页服务','insurance-prd',NULL,NULL,NULL,'yaml',NULL,'');
 INSERT INTO config_info (data_id,group_id,content,md5,gmt_create,gmt_modified,src_user,src_ip,app_name,tenant_id,c_desc,c_use,effect,`type`,c_schema,encrypted_data_key) VALUES
     ('share-caffeine-prd.yaml','DEFAULT_GROUP','caffeine:
   build:

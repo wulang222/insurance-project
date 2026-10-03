@@ -31,14 +31,14 @@ services:
     networks:
       - insurance_network
     healthcheck:
-      test: mysql --user=insurancedev -h127.0.0.1 --password='insurance@123' -e "SELECT 1;"
+      test: mysql --user=insurancedev -h127.0.0.1 --password="$$MYSQL_ROOT_PASSWORD" -e "SELECT 1;"
       start_period: 30s
       interval: 10s
       timeout: 5s
       retries: 10
     environment:
       TZ: Asia/Shanghai
-      MYSQL_ROOT_PASSWORD: insurance@123
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
     ulimits:
       nproc: 65535
       nofile:
@@ -57,7 +57,10 @@ services:
       - MYSQL_SERVICE_PORT=3306
       - MYSQL_SERVICE_DB_NAME=insurance_nacos_test
       - MYSQL_SERVICE_USER=insurancedev
-      - MYSQL_SERVICE_PASSWORD=insurance@123
+      - MYSQL_SERVICE_PASSWORD=${MYSQL_SERVICE_PASSWORD:?Set MYSQL_SERVICE_PASSWORD}
+      - NACOS_AUTH_TOKEN=${NACOS_AUTH_TOKEN:?Set NACOS_AUTH_TOKEN}
+      - NACOS_AUTH_IDENTITY_KEY=${NACOS_AUTH_IDENTITY_KEY:?Set NACOS_AUTH_IDENTITY_KEY}
+      - NACOS_AUTH_IDENTITY_VALUE=${NACOS_AUTH_IDENTITY_VALUE:?Set NACOS_AUTH_IDENTITY_VALUE}
     volumes:
       - ../data/insurancedata/nacos/logs/:/home/nacos/logs
       - ../data/insurancedata/nacos/tomcatlogs/:/home/bit/nacos/tomcat/logs/
@@ -104,7 +107,7 @@ services:
       # 用户名
       RABBITMQ_DEFAULT_USER: admin
       # 密码
-      RABBITMQ_DEFAULT_PASS: insurance@123
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Set RABBITMQ_DEFAULT_PASS}
     ports:
       - "5672:5672"
       - "15672:15672"

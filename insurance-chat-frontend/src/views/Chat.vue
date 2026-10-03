@@ -1,7 +1,7 @@
 <template>
   <div class="chat-layout">
     <!-- Sidebar -->
-    <aside class="chat-sidebar" :class="{ open: sidebarOpen }">
+    <aside class="chat-sidebar" :class="{ open: sidebarOpen }" aria-label="对话导航">
       <div class="sidebar-header">
         <div class="brand">
           <span class="brand-icon">B</span>
@@ -19,15 +19,24 @@
           :key="s.sessionId"
           class="session-item"
           :class="{ active: currentSessionId === s.sessionId }"
-          @click="selectSession(s.sessionId)"
         >
-          <div class="session-avatar">AI</div>
-          <div class="session-info">
-            <div class="session-title">{{ s.title || '新对话' }}</div>
-            <div class="session-preview">{{ s.lastMessagePreview || '暂无消息' }}</div>
-          </div>
-          <span class="session-time">{{ formatTime(s.lastMessageTime) }}</span>
-          <button class="btn-delete-session" @click.stop="handleDeleteSession(s.sessionId)" title="删除">×</button>
+          <button
+            class="session-select"
+            :aria-current="currentSessionId === s.sessionId ? 'page' : undefined"
+            @click="selectSession(s.sessionId)"
+          >
+            <span class="session-avatar">AI</span>
+            <span class="session-info">
+              <span class="session-title">{{ s.title || '新对话' }}</span>
+              <span class="session-preview">{{ s.lastMessagePreview || '暂无消息' }}</span>
+            </span>
+            <span class="session-time">{{ formatTime(s.lastMessageTime) }}</span>
+          </button>
+          <button
+            class="btn-delete-session"
+            :aria-label="`删除对话：${s.title || '新对话'}`"
+            @click="openDeleteDialog(s, $event)"
+          >×</button>
         </div>
       </div>
 
@@ -46,12 +55,22 @@
     </aside>
 
     <!-- Mobile sidebar overlay -->
-    <div v-if="sidebarOpen" class="sidebar-overlay" @click="sidebarOpen = false"></div>
+    <button
+      v-if="sidebarOpen"
+      class="sidebar-overlay"
+      aria-label="关闭对话导航"
+      @click="sidebarOpen = false"
+    ></button>
 
     <!-- Main Area -->
     <main class="chat-main">
       <!-- Mobile hamburger -->
-      <button class="mobile-menu-btn" @click="sidebarOpen = !sidebarOpen" v-if="isMobile">
+      <button
+        class="mobile-menu-btn"
+        aria-label="打开对话导航"
+        @click="sidebarOpen = !sidebarOpen"
+        v-if="isMobile"
+      >
         ☰
       </button>
 
@@ -64,19 +83,43 @@
           请在下方输入您的问题开始对话。
         </p>
         <div class="suggestions">
-          <div class="suggestion-card" @click="sendSuggestion('我想了解重疾险有哪些推荐？')">
+          <button class="suggestion-card" @click="sendSuggestion('我想了解重疾险有哪些推荐？')">
             🏥 推荐适合我的重疾险
-          </div>
-          <div class="suggestion-card" @click="sendSuggestion('医疗险和重疾险有什么区别？')">
+          </button>
+          <button class="suggestion-card" @click="sendSuggestion('医疗险和重疾险有什么区别？')">
             📖 医疗险和重疾险的区别
-          </div>
-          <div class="suggestion-card" @click="sendSuggestion('我今年30岁，程序员，预算5000元，推荐什么保险？')">
+          </button>
+          <button class="suggestion-card" @click="sendSuggestion('我今年30岁，程序员，预算5000元，推荐什么保险？')">
             💰 根据我的情况推荐保险
-          </div>
-          <div class="suggestion-card" @click="sendSuggestion('请介绍一下养老保险的种类')">
+          </button>
+          <button class="suggestion-card" @click="sendSuggestion('请介绍一下养老保险的种类')">
             👴 养老保险有哪些种类
-          </div>
+          </button>
         </div>
+      </div>
+
+      <section
+        v-if="streamStages.length > 0"
+        class="run-progress"
+        :class="{ complete: !aiLoading && !streamError }"
+        aria-label="分析进度"
+      >
+        <div class="run-progress-heading">
+          <span class="run-pulse" aria-hidden="true"></span>
+          <strong>{{ aiLoading ? '正在组织保障分析' : '本次分析轨迹' }}</strong>
+          <span>{{ currentStage }}</span>
+        </div>
+        <ol>
+          <li v-for="stage in streamStages" :key="stage.id">
+            <span>{{ stage.label }}</span>
+            <small v-if="stage.detail">{{ stage.detail }}</small>
+          </li>
+        </ol>
+      </section>
+
+      <div v-if="streamError" class="stream-error" role="alert">
+        <span>{{ streamError }}</span>
+        <button type="button" @click="retryLastMessage">重新发送</button>
       </div>
 
       <!-- Messages Area -->
@@ -93,6 +136,31 @@
             </div>
             <div class="message-body">
               <div class="message-content" v-html="renderMarkdown(msg.content)"></div>
+              <div v-if="msg.metadata?.warnings?.length" class="message-warnings" role="status">
+                <strong>信息提示</strong>
+                <ul>
+                  <li v-for="warning in msg.metadata.warnings" :key="warning">{{ warning }}</li>
+                </ul>
+              </div>
+              <div v-if="msg.metadata?.requiredInput" class="required-input-card">
+                <strong>需要您补充</strong>
+                <p>{{ msg.metadata.requiredInput.question }}</p>
+              </div>
+              <details v-if="msg.metadata?.citations?.length" class="citation-panel">
+                <summary>查看来源（{{ msg.metadata.citations.length }}）</summary>
+                <article
+                  v-for="citation in msg.metadata.citations"
+                  :key="citation.citation_id"
+                  class="citation-item"
+                >
+                  <strong>{{ citation.title }}</strong>
+                  <span>
+                    {{ citation.section || '原始条款' }}<template v-if="citation.page"> · 第 {{ citation.page }} 页</template>
+                  </span>
+                  <p>{{ citation.excerpt }}</p>
+                  <code>{{ citation.citation_id }}</code>
+                </article>
+              </details>
               <div class="message-time">{{ formatTime(msg.createTime) }}</div>
             </div>
           </div>
@@ -115,37 +183,78 @@
       <div class="input-area">
         <div class="input-container">
           <div class="input-box">
+            <label class="sr-only" for="chat-input">输入保险问题</label>
             <textarea
+              id="chat-input"
               ref="textareaRef"
               v-model="inputText"
-              class="input-textarea"
+              class="input-textarea resize-none"
               placeholder="输入您的问题..."
               :rows="1"
-              @keydown.enter.exact="handleSend"
+              :disabled="aiLoading"
+              @keydown="handleTextareaKeydown"
               @input="autoResize"
             ></textarea>
             <button
+              v-if="!aiLoading"
               class="btn-send"
-              :class="{ sending: aiLoading }"
-              :disabled="!inputText.trim() || aiLoading"
+              :disabled="!inputText.trim()"
+              aria-label="发送消息"
               @click="handleSend"
             >
               ↑
             </button>
+            <button
+              v-else
+              class="btn-stop"
+              aria-label="停止接收回复"
+              @click="stopStreaming"
+            >
+              ■
+            </button>
           </div>
-          <p class="input-hint">按 Enter 发送，Shift + Enter 换行</p>
+          <p class="input-hint">按 Enter 发送，Shift + Enter 换行；生成中可停止接收</p>
         </div>
       </div>
     </main>
+
+    <div
+      v-if="deleteDialog.open"
+      class="dialog-backdrop"
+      @keydown="handleDialogKeydown"
+    >
+      <section
+        class="confirm-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-dialog-title"
+        aria-describedby="delete-dialog-description"
+      >
+        <h2 id="delete-dialog-title">删除这段对话？</h2>
+        <p id="delete-dialog-description">
+          “{{ deleteDialog.title }}”将从对话列表移除，当前版本暂不支持恢复。
+        </p>
+        <p v-if="deleteDialog.error" class="dialog-error" role="alert">{{ deleteDialog.error }}</p>
+        <div class="dialog-actions">
+          <button ref="deleteCancelRef" class="btn-dialog-neutral" :disabled="deleteDialog.busy" @click="closeDeleteDialog">
+            保留对话
+          </button>
+          <button ref="deleteConfirmRef" class="btn-dialog-danger" :disabled="deleteDialog.busy" @click="confirmDeleteSession">
+            {{ deleteDialog.busy ? '正在删除…' : '删除对话' }}
+          </button>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch, computed } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
-import { getSessions, deleteSession, sendMessage, queryMessages } from '../api'
+import { getSessions, deleteSession, queryMessages, streamMessage } from '../api'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 const route = useRoute()
 const router = useRouter()
@@ -160,6 +269,21 @@ const aiLoading = ref(false)
 const sidebarOpen = ref(false)
 const textareaRef = ref(null)
 const messagesArea = ref(null)
+const deleteCancelRef = ref(null)
+const deleteConfirmRef = ref(null)
+const streamStages = ref([])
+const currentStage = ref('')
+const streamError = ref('')
+const lastSentText = ref('')
+const deleteDialog = reactive({
+  open: false,
+  sessionId: '',
+  title: '',
+  busy: false,
+  error: '',
+  trigger: null
+})
+let streamController = null
 
 const isMobile = computed(() => window.innerWidth <= 768)
 
@@ -174,6 +298,10 @@ onMounted(async () => {
   }
 })
 
+onBeforeUnmount(() => {
+  streamController?.abort()
+})
+
 // ==================== Session Management ====================
 async function loadSessions() {
   try {
@@ -185,10 +313,14 @@ async function loadSessions() {
 }
 
 function startNewChat() {
+  streamController?.abort()
   currentSessionId.value = ''
   messages.value = []
   // 不使用 router.push，保持在 /chat 页面，只清空右侧
   inputText.value = ''
+  streamStages.value = []
+  currentStage.value = ''
+  streamError.value = ''
   sidebarOpen.value = false
   nextTick(() => textareaRef.value?.focus())
 }
@@ -200,16 +332,55 @@ function selectSession(sessionId) {
   sidebarOpen.value = false
 }
 
-async function handleDeleteSession(sessionId) {
-  if (!confirm('确定删除这个对话吗？')) return
+function openDeleteDialog(session, event) {
+  deleteDialog.open = true
+  deleteDialog.sessionId = session.sessionId
+  deleteDialog.title = session.title || '新对话'
+  deleteDialog.error = ''
+  deleteDialog.trigger = event.currentTarget
+  nextTick(() => deleteCancelRef.value?.focus())
+}
+
+function closeDeleteDialog() {
+  if (deleteDialog.busy) return
+  deleteDialog.open = false
+  nextTick(() => deleteDialog.trigger?.focus())
+}
+
+function handleDialogKeydown(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closeDeleteDialog()
+    return
+  }
+  if (event.key !== 'Tab') return
+  const first = deleteCancelRef.value
+  const last = deleteConfirmRef.value
+  if (!first || !last) return
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+async function confirmDeleteSession() {
+  if (deleteDialog.busy) return
+  deleteDialog.busy = true
+  deleteDialog.error = ''
   try {
-    await deleteSession(sessionId)
-    sessions.value = sessions.value.filter(s => s.sessionId !== sessionId)
-    if (currentSessionId.value === sessionId) {
+    await deleteSession(deleteDialog.sessionId)
+    sessions.value = sessions.value.filter(s => s.sessionId !== deleteDialog.sessionId)
+    if (currentSessionId.value === deleteDialog.sessionId) {
       startNewChat()
     }
+    deleteDialog.open = false
   } catch (e) {
-    console.error('删除会话失败', e)
+    deleteDialog.error = '暂时无法删除，请检查网络后重试。'
+  } finally {
+    deleteDialog.busy = false
   }
 }
 
@@ -217,7 +388,10 @@ async function handleDeleteSession(sessionId) {
 async function loadMessages(sessionId) {
   try {
     const res = await queryMessages({ sessionId, pageNum: 1, pageSize: 100 })
-    messages.value = res.data || []
+    messages.value = (res.data || []).map(message => ({
+      ...message,
+      metadata: parseMetadata(message.metadataJson)
+    }))
     await nextTick()
     scrollToBottom()
   } catch (e) {
@@ -226,15 +400,13 @@ async function loadMessages(sessionId) {
   }
 }
 
-async function handleSend(e) {
-  if (e) {
-    // Shift+Enter 换行
-    if (e.shiftKey) return
-    e.preventDefault()
-  }
-
+async function handleSend() {
   const text = inputText.value.trim()
   if (!text || aiLoading.value) return
+  lastSentText.value = text
+  streamError.value = ''
+  streamStages.value = []
+  currentStage.value = '正在连接分析服务'
 
   // 添加用户消息到界面
   const userMsg = {
@@ -251,50 +423,105 @@ async function handleSend(e) {
   await nextTick()
   scrollToBottom()
 
-  // 调用 API
+  // 调用标准 SSE API；每个事件在 Java 层保持原始事件名和数据结构。
   aiLoading.value = true
+  streamController = new AbortController()
   try {
-    const res = await sendMessage({
-      sessionId: currentSessionId.value || undefined,
-      content: text,
-      agentType: 'simple_agent'
-    })
-
-    // 更新 sessionId（新会话时后端创建）
-    if (res.data?.sessionId && !currentSessionId.value) {
-      currentSessionId.value = res.data.sessionId
-      router.replace(`/chat/${res.data.sessionId}`)
-    }
-
-    // 添加 AI 回复
-    const aiMsg = {
-      messageId: res.data?.messageId || (Date.now() + 1).toString(),
-      sessionId: res.data?.sessionId || currentSessionId.value,
-      role: 'assistant',
-      content: res.data?.content || '暂无回复',
-      messageType: 'text',
-      createTime: new Date().toISOString()
-    }
-    messages.value.push(aiMsg)
-
-    // 刷新会话列表
+    await streamMessage(
+      {
+        sessionId: currentSessionId.value || undefined,
+        content: text
+      },
+      {
+        signal: streamController.signal,
+        onEvent: handleStreamEvent
+      }
+    )
     await loadSessions()
   } catch (e) {
-    console.error('发送失败', e)
-    const errMsg = {
-      messageId: (Date.now() + 1).toString(),
-      sessionId: currentSessionId.value,
-      role: 'assistant',
-      content: '抱歉，发送失败了，请稍后重试。\n\n错误信息：' + (e.message || '网络错误'),
-      messageType: 'text',
-      createTime: new Date().toISOString()
-    }
-    messages.value.push(errMsg)
+    streamError.value = e.name === 'AbortError'
+      ? '已停止接收本次回复。服务端可能仍在完成并保存分析。'
+      : '分析服务暂时不可用，您的问题已保留，可以重新发送。'
   } finally {
     aiLoading.value = false
+    streamController = null
     await nextTick()
     scrollToBottom()
+    textareaRef.value?.focus()
   }
+}
+
+function handleStreamEvent(event) {
+  const payload = event.data && typeof event.data === 'object' ? event.data : {}
+  const label = payload.stage || stageLabel(event.type)
+  if (label && event.type !== 'run.result' && event.type !== 'done') {
+    currentStage.value = label
+    streamStages.value.push({
+      id: `${event.id || streamStages.value.length}-${event.type}`,
+      label,
+      detail: payload.agent || payload.route || ''
+    })
+  }
+  if (payload.thread_id && !currentSessionId.value) {
+    currentSessionId.value = payload.thread_id
+    router.replace(`/chat/${payload.thread_id}`)
+  }
+  if (event.type === 'run.result') {
+    const metadata = {
+      runId: payload.run_id,
+      status: payload.status,
+      handledBy: payload.handled_by || [],
+      citations: payload.citations || [],
+      warnings: payload.warnings || [],
+      requiredInput: payload.required_input || null,
+      traceId: findRootTraceId(payload.trace, payload.run_id)
+    }
+    messages.value.push({
+      messageId: payload.run_id || (Date.now() + 1).toString(),
+      sessionId: payload.thread_id || currentSessionId.value,
+      role: 'assistant',
+      content: payload.answer || payload.required_input?.question || '本次分析没有生成可展示内容。',
+      messageType: 'text',
+      metadata,
+      createTime: new Date().toISOString()
+    })
+    if (payload.status === 'failed') {
+      streamError.value = '本次分析未完成，请稍后重新发送。'
+    }
+    nextTick(scrollToBottom)
+  }
+}
+
+function stageLabel(type) {
+  return {
+    'run.started': '正在分析您的需求',
+    'route.selected': '已确定处理路径',
+    'agent.completed': '专业模块已完成',
+    'run.interrupted': '需要补充信息',
+    'run.completed': '分析完成',
+    'run.failed': '分析未完成'
+  }[type] || ''
+}
+
+function findRootTraceId(trace, fallback) {
+  const root = trace?.spans?.find(span => String(span.name || '').startsWith('run '))
+  return root?.span_id || fallback || ''
+}
+
+function handleTextareaKeydown(event) {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return
+  event.preventDefault()
+  handleSend()
+}
+
+function stopStreaming() {
+  streamController?.abort()
+}
+
+function retryLastMessage() {
+  if (!lastSentText.value || aiLoading.value) return
+  inputText.value = lastSentText.value
+  handleSend()
 }
 
 function sendSuggestion(text) {
@@ -337,9 +564,19 @@ const formatTime = (t) => {
 const renderMarkdown = (text) => {
   if (!text) return ''
   try {
-    return marked.parse(text)
+    return DOMPurify.sanitize(marked.parse(text))
   } catch {
-    return text.replace(/\n/g, '<br/>')
+    return DOMPurify.sanitize(text).replace(/\n/g, '<br/>')
+  }
+}
+
+const parseMetadata = (raw) => {
+  if (!raw) return {}
+  if (typeof raw === 'object') return raw
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return {}
   }
 }
 

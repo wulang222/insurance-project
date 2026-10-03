@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">Insurance Agent Day 7 Trace</title>
+  <desc id="desc">家庭保障规划一次运行的 Run、Route、Agent、Model、Tool、Compliance 和结果轨迹。</desc>
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#667eea"/>
+      <stop offset="1" stop-color="#4f46e5"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="18" flood-color="#111827" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .sans { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .label { font-size: 18px; font-weight: 700; fill: #111827; }
+      .meta { font-size: 14px; fill: #6b7280; }
+      .small { font-size: 13px; fill: #6b7280; }
+      .chip { font-size: 12px; font-weight: 700; }
+    </style>
+  </defs>
+  <rect width="1440" height="900" fill="#f3f4f6"/>
+  <rect x="40" y="36" width="1360" height="828" rx="24" fill="#ffffff" filter="url(#shadow)"/>
+
+  <rect x="40" y="36" width="1360" height="82" rx="24" fill="#ffffff"/>
+  <rect x="40" y="94" width="1360" height="24" fill="#ffffff"/>
+  <rect x="72" y="59" width="38" height="38" rx="10" fill="url(#brand)"/>
+  <text x="91" y="84" text-anchor="middle" class="sans" font-size="16" font-weight="700" fill="#ffffff">B</text>
+  <text x="126" y="77" class="sans label">Agent Trace · 家庭保障规划</text>
+  <text x="126" y="99" class="mono small">run_id: day7-family-demo · prompt: recommendation:v2</text>
+  <rect x="1198" y="61" width="166" height="34" rx="17" fill="#ecfdf5"/>
+  <circle cx="1220" cy="78" r="5" fill="#047857"/>
+  <text x="1234" y="83" class="sans" font-size="13" font-weight="700" fill="#047857">completed · 1.84s</text>
+
+  <line x1="180" y1="170" x2="180" y2="766" stroke="#c7d2fe" stroke-width="3"/>
+
+  <circle cx="180" cy="176" r="16" fill="#4f46e5"/>
+  <path d="M174 176l4 4 8-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="228" y="144" width="1112" height="76" rx="12" fill="#f8faff" stroke="#c7d2fe"/>
+  <text x="254" y="177" class="sans label">Run started</text>
+  <text x="254" y="202" class="sans meta">创建持久化 RunContext，绑定 thread、预算、Prompt 与模型策略</text>
+  <rect x="1150" y="164" width="154" height="28" rx="14" fill="#eef2ff"/>
+  <text x="1227" y="183" text-anchor="middle" class="mono chip" fill="#4338ca">run · 0 ms</text>
+
+  <circle cx="180" cy="286" r="16" fill="#4f46e5"/>
+  <path d="M174 286l4 4 8-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="228" y="248" width="1112" height="84" rx="12" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="254" y="281" class="sans label">Route selected</text>
+  <text x="254" y="306" class="sans meta">规则优先识别为家庭保障规划，进入组合式 Workflow</text>
+  <rect x="1118" y="273" width="186" height="28" rx="14" fill="#eef2ff"/>
+  <text x="1211" y="292" text-anchor="middle" class="mono chip" fill="#4338ca">family_plan · 8 ms</text>
+
+  <circle cx="180" cy="411" r="16" fill="#4f46e5"/>
+  <path d="M174 411l4 4 8-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="228" y="362" width="1112" height="112" rx="12" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="254" y="396" class="sans label">Parallel specialists</text>
+  <text x="254" y="422" class="sans meta">Profile、CRM、Coverage、Product 与 Knowledge Agent 在同一计划内受控执行</text>
+  <rect x="254" y="440" width="124" height="24" rx="12" fill="#f3f4f6"/><text x="316" y="457" text-anchor="middle" class="mono chip" fill="#374151">profile_agent</text>
+  <rect x="388" y="440" width="104" height="24" rx="12" fill="#f3f4f6"/><text x="440" y="457" text-anchor="middle" class="mono chip" fill="#374151">crm_agent</text>
+  <rect x="502" y="440" width="126" height="24" rx="12" fill="#f3f4f6"/><text x="565" y="457" text-anchor="middle" class="mono chip" fill="#374151">coverage_agent</text>
+  <rect x="638" y="440" width="122" height="24" rx="12" fill="#f3f4f6"/><text x="699" y="457" text-anchor="middle" class="mono chip" fill="#374151">product_agent</text>
+  <rect x="770" y="440" width="142" height="24" rx="12" fill="#f3f4f6"/><text x="841" y="457" text-anchor="middle" class="mono chip" fill="#374151">knowledge_agent</text>
+  <text x="1304" y="421" text-anchor="end" class="mono small">842 ms</text>
+
+  <circle cx="180" cy="548" r="16" fill="#4f46e5"/>
+  <path d="M174 548l4 4 8-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="228" y="510" width="1112" height="86" rx="12" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="254" y="544" class="sans label">Model + Tool governance</text>
+  <text x="254" y="570" class="sans meta">Model Gateway 记录 Token/重试/降级；Tool Gateway 校验权限、参数、风险和真实数据源</text>
+  <text x="1304" y="552" text-anchor="end" class="mono small">model 3 · tool 7 · fallback 0</text>
+
+  <circle cx="180" cy="658" r="16" fill="#047857"/>
+  <path d="M174 658l4 4 8-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="228" y="620" width="1112" height="86" rx="12" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="254" y="654" class="sans label">Evidence + Compliance passed</text>
+  <text x="254" y="680" class="sans meta">产品字段一致；2 条 Citation 可追溯；无承诺性措辞；免责声明已附加</text>
+  <rect x="1143" y="643" width="161" height="28" rx="14" fill="#d1fae5"/>
+  <text x="1224" y="662" text-anchor="middle" class="mono chip" fill="#047857">citation 2 · pass</text>
+
+  <circle cx="180" cy="766" r="16" fill="#047857"/>
+  <path d="M174 766l4 4 8-9" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="228" y="730" width="1112" height="72" rx="12" fill="url(#brand)"/>
+  <text x="254" y="764" class="sans" font-size="18" font-weight="700" fill="#ffffff">Final answer delivered</text>
+  <text x="254" y="787" class="sans" font-size="14" fill="#e0e7ff">保障缺口、优先级、预算建议与条款来源已返回 Java Portal 和前端</text>
+  <text x="1304" y="772" text-anchor="end" class="mono" font-size="13" fill="#e0e7ff">trace_root: a91f7c2e8d4b6a10</text>
+
+  <text x="72" y="838" class="sans small">Day 7 trace snapshot · attributes are allowlisted; user identity is hashed; no phone, ID card, health text or password is recorded.</text>
+</svg>

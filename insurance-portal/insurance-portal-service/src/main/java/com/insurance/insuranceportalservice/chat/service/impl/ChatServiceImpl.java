@@ -18,19 +18,25 @@ import com.insurance.insuranceportalservice.chat.client.PythonAgentClient;
 import com.insurance.insuranceportalservice.chat.service.ChatCacheConstants;
 import com.insurance.insuranceportalservice.chat.service.IChatService;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -70,6 +76,8 @@ public class ChatServiceImpl implements IChatService {
 
     @Autowired
     private PythonAgentClient pythonAgentClient;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     // ==================== 会话列表 ====================
 
@@ -315,24 +323,56 @@ public class ChatServiceImpl implements IChatService {
         ChatSession session = getOrCreateSession(sendMessageDTO.getSessionId(), userId, sendMessageDTO);
 
         // 2. 保存用户消息
-        ChatMessage userMessage = saveMessage(
+        saveMessage(
                 session.getSessionId(), userId, "user",
                 sendMessageDTO.getContent(), "text", null
         );
 
-        // 3. 生成AI回复（TODO: 对接Python LangGraph agent）
-        String aiContent = generateAiReply(session, sendMessageDTO.getContent());
+        // 3. 调用新的 Run API，保留完整状态、引用和 Trace 元数据
+        PythonAgentClient.RunResponse aiResponse = generateAiReply(
+                session, sendMessageDTO.getContent());
+        String aiContent = StringUtils.defaultIfBlank(
+                aiResponse.getAnswer(), "AI服务未返回可展示内容。");
 
         // 4. 保存AI回复
         ChatMessage aiMessage = saveMessage(
                 session.getSessionId(), userId, "assistant",
-                aiContent, "text", null
+                aiContent, "text", buildMetadataJson(aiResponse)
         );
 
         // 5. 更新会话信息
         updateSessionAfterMessage(session, sendMessageDTO.getContent(), aiMessage.getCreateTime());
 
         return convertToVO(aiMessage);
+    }
+
+    @Override
+    public SseEmitter sendMessageStream(SendMessageDTO sendMessageDTO, Long userId) {
+        ChatSession session = getOrCreateSession(
+                sendMessageDTO.getSessionId(), userId, sendMessageDTO);
+        saveMessage(
+                session.getSessionId(), userId, "user",
+                sendMessageDTO.getContent(), "text", null
+        );
+        AtomicBoolean persisted = new AtomicBoolean(false);
+        return pythonAgentClient.sendMessageStream(
+                session.getSessionId(),
+                String.valueOf(userId),
+                sendMessageDTO.getContent(),
+                result -> {
+                    if (!persisted.compareAndSet(false, true)) {
+                        return;
+                    }
+                    String content = StringUtils.defaultIfBlank(
+                            result.getAnswer(), "AI服务未返回可展示内容。");
+                    ChatMessage aiMessage = saveMessage(
+                            session.getSessionId(), userId, "assistant",
+                            content, "text", buildMetadataJson(result)
+                    );
+                    updateSessionAfterMessage(
+                            session, sendMessageDTO.getContent(), aiMessage.getCreateTime());
+                }
+        );
     }
 
     /**
@@ -444,7 +484,8 @@ public class ChatServiceImpl implements IChatService {
      * 通过 HTTP 调用 Python AI Server（FastAPI），由 Python 端
      * 驱动 LangGraph 工作流（保险推荐 / 知识问答 / 通用对话）
      */
-    private String generateAiReply(ChatSession session, String userContent) {
+    private PythonAgentClient.RunResponse generateAiReply(
+            ChatSession session, String userContent) {
         log.info("调用Python主Agent: sessionId={}", session.getSessionId());
 
         return pythonAgentClient.sendMessage(
@@ -452,6 +493,48 @@ public class ChatServiceImpl implements IChatService {
                 String.valueOf(session.getUserId()),
                 userContent
         );
+    }
+
+    String buildMetadataJson(PythonAgentClient.RunResponse response) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("runId", response.getRunId());
+        metadata.put("status", response.getStatus());
+        metadata.put("handledBy", response.getHandledBy() == null
+                ? Collections.emptyList() : response.getHandledBy());
+        metadata.put("citations", response.getCitations() == null
+                ? Collections.emptyList() : response.getCitations());
+        metadata.put("warnings", response.getWarnings() == null
+                ? Collections.emptyList() : response.getWarnings());
+        metadata.put("traceId", extractTraceId(response));
+        if (response.getRequiredInput() != null) {
+            metadata.put("requiredInput", response.getRequiredInput());
+        }
+        try {
+            return objectMapper.writeValueAsString(metadata);
+        } catch (JsonProcessingException e) {
+            log.warn("序列化Agent元数据失败: runId={}", response.getRunId());
+            return "{}";
+        }
+    }
+
+    private String extractTraceId(PythonAgentClient.RunResponse response) {
+        if (response.getTrace() != null) {
+            Object rawSpans = response.getTrace().get("spans");
+            if (rawSpans instanceof List<?>) {
+                for (Object rawSpan : (List<?>) rawSpans) {
+                    if (rawSpan instanceof Map<?, ?>) {
+                        Map<?, ?> span = (Map<?, ?>) rawSpan;
+                        Object name = span.get("name");
+                        Object spanId = span.get("span_id");
+                        if (name != null && name.toString().startsWith("run ")
+                                && spanId != null) {
+                            return spanId.toString();
+                        }
+                    }
+                }
+            }
+        }
+        return StringUtils.defaultString(response.getRunId());
     }
 
     // ==================== 删除会话 ====================

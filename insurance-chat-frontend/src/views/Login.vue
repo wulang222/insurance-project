@@ -22,15 +22,15 @@
       </div>
 
       <!-- Phone Login -->
-      <form v-if="tab === 'phone'" @submit.prevent="handlePhoneLogin">
+      <form v-if="tab === 'phone'" novalidate @submit.prevent="handlePhoneLogin">
         <div class="form-group">
-          <label class="form-label">手机号</label>
-          <input v-model="phone" class="form-input" type="tel" placeholder="请输入手机号" maxlength="11" />
+          <label class="form-label" for="phone">手机号</label>
+          <input id="phone" v-model="phone" class="form-input" type="tel" placeholder="请输入手机号" maxlength="11" />
         </div>
         <div class="form-group">
-          <label class="form-label">验证码</label>
+          <label class="form-label" for="phone-code">验证码</label>
           <div class="input-row">
-            <input v-model="phoneCode" class="form-input" type="text" placeholder="请输入验证码" maxlength="6" />
+            <input id="phone-code" v-model="phoneCode" class="form-input" type="text" placeholder="请输入验证码" maxlength="6" />
             <button type="button" class="btn-code" :disabled="phoneCountdown > 0" @click="sendPhoneSms">
               {{ phoneCountdown > 0 ? `${phoneCountdown}s` : '获取验证码' }}
             </button>
@@ -43,15 +43,15 @@
       </form>
 
       <!-- Email Login -->
-      <form v-if="tab === 'email'" @submit.prevent="handleEmailLogin">
+      <form v-if="tab === 'email'" novalidate @submit.prevent="handleEmailLogin">
         <div class="form-group">
-          <label class="form-label">邮箱地址</label>
-          <input v-model="email" class="form-input" type="email" placeholder="请输入邮箱地址" />
+          <label class="form-label" for="email">邮箱地址</label>
+          <input id="email" v-model="email" class="form-input" type="email" placeholder="请输入邮箱地址" />
         </div>
         <div class="form-group">
-          <label class="form-label">验证码</label>
+          <label class="form-label" for="email-code">验证码</label>
           <div class="input-row">
-            <input v-model="emailCode" class="form-input" type="text" placeholder="请输入验证码" maxlength="6" />
+            <input id="email-code" v-model="emailCode" class="form-input" type="text" placeholder="请输入验证码" maxlength="6" />
             <button type="button" class="btn-code" :disabled="emailCountdown > 0" @click="sendEmailVerificationCode">
               {{ emailCountdown > 0 ? `${emailCountdown}s` : '获取验证码' }}
             </button>
@@ -80,8 +80,8 @@
           微信登录需在微信客户端内打开或扫描小程序码
         </p>
         <div class="form-group">
-          <label class="form-label">或输入微信OpenID（开发模式）</label>
-          <input v-model="wechatOpenId" class="form-input" type="text" placeholder="请输入微信OpenID" />
+          <label class="form-label" for="wechat-open-id">或输入微信OpenID（开发模式）</label>
+          <input id="wechat-open-id" v-model="wechatOpenId" class="form-input" type="text" placeholder="请输入微信OpenID" />
         </div>
         <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
         <button class="btn-submit" :disabled="loading" @click="handleWechatLogin">

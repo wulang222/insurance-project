@@ -93,7 +93,7 @@ def create_app(
 
     @app.post("/chat/stream")
     async def chat_stream(req: ChatRequest, request: Request) -> StreamingResponse:
-        """Legacy SSE endpoint with the same run identity and persistence semantics."""
+        """Emit schema-stable run events for Java and browser SSE consumers."""
 
         runtime = _runtime(request)
 
@@ -104,29 +104,9 @@ def create_app(
                 thread_id=req.session_id or None,
             )
             response = RunResponse.from_snapshot(snapshot)
-            yield _sse(
-                {
-                    "session_id": response.thread_id,
-                    "message_id": response.run_id,
-                    "delta": response.answer,
-                    "status": response.status,
-                    "handled_by": (
-                        response.handled_by[0] if response.handled_by else ""
-                    ),
-                    "route": response.structured_data.get("route", ""),
-                    "route_reason": response.structured_data.get("route_reason", ""),
-                    "required_input": response.required_input,
-                }
-            )
-            yield _sse(
-                {
-                    "session_id": response.thread_id,
-                    "message_id": response.run_id,
-                    "delta": "",
-                    "done": True,
-                    "status": response.status,
-                }
-            )
+            events = _chat_stream_events(response)
+            for sequence, (event_type, payload) in enumerate(events, start=1):
+                yield _sse_event(event_type, payload, event_id=sequence)
 
         return StreamingResponse(
             event_generator(),
@@ -214,6 +194,72 @@ def _runtime(request: Request) -> RunManager:
 
 def _sse(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _sse_event(event_type: str, payload: dict, *, event_id: int | str) -> str:
+    return (
+        f"id: {event_id}\n"
+        f"event: {event_type}\n"
+        f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+    )
+
+
+def _chat_stream_events(response: RunResponse) -> list[tuple[str, dict]]:
+    """Convert one durable run result into the public SSE event contract."""
+
+    common = {
+        "run_id": response.run_id,
+        "thread_id": response.thread_id,
+        "status": response.status,
+    }
+    events: list[tuple[str, dict]] = [
+        ("run.started", {**common, "stage": "正在分析您的需求"})
+    ]
+    route = response.structured_data.get("route")
+    if route:
+        events.append(
+            (
+                "route.selected",
+                {
+                    **common,
+                    "stage": "已确定处理路径",
+                    "route": route,
+                    "reason": response.structured_data.get("route_reason", ""),
+                },
+            )
+        )
+    for agent_name in response.handled_by:
+        events.append(
+            (
+                "agent.completed",
+                {
+                    **common,
+                    "stage": "专业模块已完成",
+                    "agent": agent_name,
+                },
+            )
+        )
+    terminal_type = {
+        "completed": "run.completed",
+        "needs_input": "run.interrupted",
+        "failed": "run.failed",
+    }.get(response.status, "run.completed")
+    terminal_payload = {
+        **common,
+        "stage": {
+            "completed": "分析完成",
+            "needs_input": "需要补充信息",
+            "failed": "分析未完成",
+        }.get(response.status, "分析完成"),
+    }
+    if response.required_input:
+        terminal_payload["required_input"] = response.required_input
+    if response.error:
+        terminal_payload["error"] = response.error
+    events.append((terminal_type, terminal_payload))
+    events.append(("run.result", response.model_dump(mode="json")))
+    events.append(("done", {**common, "done": True}))
+    return events
 
 
 app = create_app()

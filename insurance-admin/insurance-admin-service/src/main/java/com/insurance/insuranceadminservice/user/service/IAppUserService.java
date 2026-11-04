@@ -84,5 +84,10 @@ public interface IAppUserService {
      */
     AppUserDTO findByEmail(String email);
 
+    /**
+     * 撤销 C 端登录会话，不删除账号。
+     * @param userId 用户 ID
+     */
+    void kick(Long userId);
 
 }

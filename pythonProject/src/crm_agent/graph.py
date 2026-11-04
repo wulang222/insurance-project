@@ -17,6 +17,7 @@ import json
 import logging
 
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
 
 from crm_agent.state import CRMAgentState
 from crm_agent.config import create_llm
@@ -40,8 +41,13 @@ async def load_customer_node(state: CRMAgentState) -> dict:
     user_id = state.get("user_id", "")
     messages = state.get("messages", [])
 
-    # 当请求携带消息但未指定用户时，保留原有默认用户行为。
+    # 从对话消息中提取用户ID（如果未指定），兼容 dict 和对象
     if not user_id and messages:
+        last_msg = messages[-1]
+        if isinstance(last_msg, dict):
+            content = last_msg.get("content", str(last_msg))
+        else:
+            content = getattr(last_msg, "content", str(last_msg))
         user_id = "default_user"
 
     data = load_customer_data.invoke({"user_id": user_id})
@@ -166,14 +172,14 @@ def _simple_report(state: CRMAgentState) -> str:
     risk_emoji = "🔴" if churn >= 60 else "🟡" if churn >= 30 else "🟢"
 
     lines = [
-        "## 📊 CRM 客户洞察报告",
-        "",
-        "### 客户概览",
+        f"## 📊 CRM 客户洞察报告",
+        f"",
+        f"### 客户概览",
         f"- 客户: {profile.get('name', '未知')}",
         f"- 等级: {profile.get('membership_level', 'standard')}",
         f"- 年度保费: {profile.get('total_premium', 0)}元",
-        "",
-        "### ⚠️ 风险预警",
+        f"",
+        f"### ⚠️ 风险预警",
         f"{risk_emoji} 流失风险评分: {churn}/100",
     ]
 
@@ -190,7 +196,7 @@ def _simple_report(state: CRMAgentState) -> str:
     lines.append("")
     lines.append("### 📋 建议行动")
     lines.append(f"1. 优先处理保单续保提醒（共{len(nodes)}个关键节点）")
-    lines.append("2. 跟进客户情感趋势，主动联系了解需求")
+    lines.append(f"2. 跟进客户情感趋势，主动联系了解需求")
     lines.append(f"3. 推荐{len(upsells)}个加购机会，优先高优先级产品")
 
     return "\n".join(lines)
@@ -200,7 +206,7 @@ def _simple_report(state: CRMAgentState) -> str:
 # Build the Graph
 # ═══════════════════════════════════════════════════════════════
 
-def build_graph(*, checkpointer=None, store=None):
+def build_graph():
     """构建 CRM Agent 工作流
 
     Returns:
@@ -223,7 +229,9 @@ def build_graph(*, checkpointer=None, store=None):
     workflow.add_edge("identify_upsell", "generate_report")
     workflow.add_edge("generate_report", END)
 
-    return workflow.compile(checkpointer=checkpointer, store=store)
+    # 编译
+    checkpointer = MemorySaver()
+    return workflow.compile(checkpointer=checkpointer)
 
 
 # 模块级 graph 实例

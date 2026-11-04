@@ -8,23 +8,22 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-from harness.errors import DependencyUnavailableError
 from insurance_agent.config import (
     MYSQL_CONFIG,
     DASHSCOPE_API_KEY,
+    DASHSCOPE_BASE_URL,
+    DEFAULT_MODEL,
+    LLM_TEMPERATURE,
+    LLM_EXTRA_BODY,
     RAG_TOP_K,
+    RAG_QUERY_COUNT,
     create_llm,
 )
-from insurance_agent.state import REQUIRED_FIELDS
+from insurance_agent.state import UserProfile, REQUIRED_FIELDS
 from insurance_agent.prompts import (
     EXTRACT_PROFILE_SYSTEM_PROMPT,
     EXTRACT_PROFILE_USER_PROMPT,
     HISTORICAL_PROFILE_CONTEXT,
-)
-from shared.milvus_utils import (
-    get_embedding_function,
-    is_milvus_available,
-    milvus_search,
 )
 
 
@@ -130,8 +129,8 @@ def query_insurance_products_mysql(profile_json: str) -> list[dict]:
 
     try:
         import pymysql
-    except ImportError as exc:
-        raise DependencyUnavailableError("pymysql is not installed") from exc
+    except ImportError:
+        return []
 
     try:
         conn = pymysql.connect(
@@ -144,12 +143,8 @@ def query_insurance_products_mysql(profile_json: str) -> list[dict]:
             connect_timeout=5,
         )
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-    except Exception as exc:
-        raise DependencyUnavailableError(
-            "MySQL is unavailable",
-            details={"dependency": "mysql"},
-            retryable=True,
-        ) from exc
+    except Exception:
+        return []
 
     try:
         conditions = []
@@ -193,12 +188,8 @@ def query_insurance_products_mysql(profile_json: str) -> list[dict]:
                 row["max_price"] = float(row["max_price"])
 
         return rows
-    except Exception as exc:
-        raise DependencyUnavailableError(
-            "MySQL query failed",
-            details={"dependency": "mysql"},
-            retryable=True,
-        ) from exc
+    except Exception:
+        return []
     finally:
         cursor.close()
         conn.close()
@@ -288,6 +279,14 @@ def _mock_mysql_query(profile: dict) -> list[dict]:
 # Tool 3: RAG enrichment search（Milvus 向量检索，复用 shared/milvus_utils）
 # ---------------------------------------------------------------------------
 
+from shared.milvus_utils import (
+    is_milvus_available,
+    get_embedding_function,
+    get_milvus_collection,
+    milvus_search,
+)
+
+
 def _build_rag_queries(
     product: dict,
     profile: dict | None = None,
@@ -368,19 +367,11 @@ def rag_enrich_products(
     product_map: dict[str, dict] = {p.get("product_id", ""): p for p in products_list}
 
     if not is_milvus_available():
-        raise DependencyUnavailableError(
-            "Milvus or its embedding provider is unavailable",
-            details={"dependency": "milvus"},
-            retryable=True,
-        )
+        return _mock_rag_enrich(product_ids, products_list, profile)
 
     embed_func = get_embedding_function()
     if embed_func is None:
-        raise DependencyUnavailableError(
-            "Embedding provider is unavailable",
-            details={"dependency": "embedding"},
-            retryable=True,
-        )
+        return _mock_rag_enrich(product_ids, products_list, profile)
 
     enriched = []
     seen_texts: set[str] = set()
@@ -394,12 +385,8 @@ def rag_enrich_products(
             try:
                 hits = milvus_search(query, top_k=RAG_TOP_K)
                 all_hits.extend(hits)
-            except Exception as exc:
-                raise DependencyUnavailableError(
-                    "Milvus search failed",
-                    details={"dependency": "milvus"},
-                    retryable=True,
-                ) from exc
+            except Exception:
+                continue
 
         unique_texts: list[str] = []
         for hit in sorted(all_hits, key=lambda h: h["score"], reverse=True):

@@ -10,8 +10,8 @@ import com.insurance.insuranceadminservice.user.service.IAppUserService;
 import com.insurance.insurancecommoncore.domain.dto.BasePageDTO;
 import com.insurance.insurancecommoncore.utils.AESUtil;
 import com.insurance.insurancecommondomain.domain.ResultCode;
-import com.insurance.insurancecommondomain.domain.dto.BasePageReqDTO;
 import com.insurance.insurancecommondomain.exception.ServiceException;
+import com.insurance.insurancecommonsecurity.service.TokenService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -38,6 +38,9 @@ public class AppUserServiceImpl implements IAppUserService {
 
     @Autowired
     private AppUserMapper appUserMapper;
+
+    @Autowired
+    private TokenService tokenService;
 
     @Value("${appuser.info.defaultAvatar}")
     private String defaultAvatar;
@@ -304,6 +307,14 @@ public class AppUserServiceImpl implements IAppUserService {
                     appUserDTO.setUserId(appUser.getId());
                     return appUserDTO;
                 }).collect(Collectors.toList());
+    }
+
+    @Override
+    public void kick(Long userId) {
+        if (userId == null || appUserMapper.selectById(userId) == null) {
+            throw new ServiceException("用户不存在", ResultCode.INVALID_PARA.getCode());
+        }
+        tokenService.delLoginUser(userId, "app");
     }
 
 

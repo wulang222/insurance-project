@@ -10,7 +10,6 @@ import com.insurance.insurancecommoncore.domain.dto.BasePageDTO;
 import com.insurance.insurancecommondomain.domain.R;
 import com.insurance.insurancecommondomain.domain.vo.BasePageVO;
 import com.insurance.insurancecommondomain.exception.ServiceException;
-import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -161,7 +160,19 @@ public class AppUserController implements AppUserFeignClient {
     public R<BasePageVO<AppUserVo>> list(@RequestBody AppUserListReqDTO appUserListReqDTO) {
         BasePageDTO<AppUserDTO> appUserDTOList = appUserService.getUserList(appUserListReqDTO);
         BasePageVO<AppUserVo> result = new BasePageVO<>();
-        BeanUtils.copyProperties(appUserDTOList, result);
+        result.setTotals(appUserDTOList.getTotals());
+        result.setTotalPages(appUserDTOList.getTotalPages());
+        List<AppUserDTO> users = appUserDTOList.getList();
+        result.setList(users == null ? List.of() : users.stream().map(AppUserDTO::convertToVO).collect(Collectors.toList()));
         return R.ok(result);
+    }
+
+    /**
+     * 踢出 C 端登录，不删除账号。
+     */
+    @PostMapping("/kick")
+    public R<Void> kick(@RequestBody AppUserDTO appUserDTO) {
+        appUserService.kick(appUserDTO.getUserId());
+        return R.ok();
     }
 }

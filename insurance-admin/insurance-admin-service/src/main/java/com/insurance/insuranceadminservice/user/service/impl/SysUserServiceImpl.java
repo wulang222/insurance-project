@@ -88,7 +88,12 @@ public class SysUserServiceImpl implements ISysUserService {
             throw new ServiceException(ResultCode.USER_DISABLE);
         }
 
-        // 4 设置登录信息
+        // 4 管理端只允许超级管理员登录
+        if (!"super_admin".equals(sysUser.getIdentity())) {
+            throw new ServiceException("仅超级管理员可登录", ResultCode.INVALID_PARA.getCode());
+        }
+
+        // 5 设置登录信息
         loginUserDTO.setUserId(sysUser.getId());
         loginUserDTO.setUserName(sysUser.getNickName());
         loginUserDTO.setUserFrom("sys");

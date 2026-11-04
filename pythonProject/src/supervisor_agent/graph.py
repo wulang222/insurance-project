@@ -2,11 +2,12 @@
 
 import json
 import logging
+from functools import lru_cache
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
-from langgraph.types import Command, interrupt
 
 from crm_agent.graph import build_graph as build_crm_graph
 from insurance_agent.config import create_llm
@@ -15,7 +16,16 @@ from knowledge_agent.graph import build_graph as build_knowledge_graph
 from supervisor_agent.state import AgentRoute, SupervisorAgentState
 logger = logging.getLogger(__name__)
 
+_store_ref: Any = None
+
+
 # ─── helpers (must be defined before build_graph) ───────────
+
+def _clear_child_graph_cache() -> None:
+    _get_insurance_graph.cache_clear()
+    _get_knowledge_graph.cache_clear()
+    _get_crm_graph.cache_clear()
+
 
 def _latest_user_text(messages: list) -> str:
     for msg in reversed(messages):
@@ -124,21 +134,6 @@ def _child_output(result: dict, child_name: str, answer_key: str) -> dict:
     }
 
 
-async def _invoke_child_with_interrupts(
-    graph: Any,
-    input_data: dict[str, Any],
-    config: RunnableConfig,
-) -> dict[str, Any]:
-    """Propagate child interrupts to the parent and resume the same child thread."""
-
-    result = await graph.ainvoke(input_data, config)
-    while result.get("__interrupt__"):
-        child_interrupt = result["__interrupt__"][0]
-        resume_payload = interrupt(getattr(child_interrupt, "value", child_interrupt))
-        result = await graph.ainvoke(Command(resume=resume_payload), config)
-    return result
-
-
 def _extract_message_reply(result: dict) -> str:
     messages = result.get("messages", [])
     if not messages:
@@ -158,16 +153,19 @@ def _extract_message_reply(result: dict) -> str:
     return str(content)
 
 
-def _get_insurance_graph(*, checkpointer=None, store=None):
-    return build_insurance_graph(checkpointer=checkpointer, store=store)
+@lru_cache(maxsize=1)
+def _get_insurance_graph():
+    return build_insurance_graph(store=_store_ref)
 
 
-def _get_knowledge_graph(*, checkpointer=None, store=None):
-    return build_knowledge_graph(checkpointer=checkpointer, store=store)
+@lru_cache(maxsize=1)
+def _get_knowledge_graph():
+    return build_knowledge_graph(store=_store_ref)
 
 
-def _get_crm_graph(*, checkpointer=None, store=None):
-    return build_crm_graph(checkpointer=checkpointer, store=store)
+@lru_cache(maxsize=1)
+def _get_crm_graph():
+    return build_crm_graph()
 
 
 # ─── ROUTE_PROMPT ───────────────────────────────────────────
@@ -211,7 +209,7 @@ async def route_request_node(state: SupervisorAgentState) -> dict:
             if llm_route in ("insurance_agent", "knowledge_agent", "crm_agent"):
                 route = llm_route
                 reason = str(parsed.get("reason", "classified by LLM"))
-        except Exception:
+        except Exception as exc:
             pass  # 规则路由已经覆盖了主要场景，LLM 失败静默处理
 
     return {"route": route, "route_reason": reason}
@@ -220,48 +218,58 @@ async def route_request_node(state: SupervisorAgentState) -> dict:
 async def call_insurance_agent_node(
     state: SupervisorAgentState,
     config: RunnableConfig | None = None,
-    *,
-    graph: Any = None,
 ) -> dict:
     """Run the insurance recommendation child graph."""
-    child_graph = graph or _get_insurance_graph()
-    result = await _invoke_child_with_interrupts(
-        child_graph,
-        _child_input(state),
-        _child_config(config, "insurance_agent"),
-    )
+    graph = _get_insurance_graph()
+    try:
+        result = await graph.ainvoke(
+            _child_input(state),
+            _child_config(config, "insurance_agent"),
+        )
+    except Exception:
+        # interrupt() 抛出的中断（如缺少年龄/职业等必填字段）
+        return {
+            "handled_by": "insurance_agent",
+            "final_answer": "需要您补充年龄、职业、预算和意向险种信息，才能为您精准推荐保险产品。",
+        }
     return _child_output(result, "insurance_agent", "final_recommendation")
 
 
 async def call_knowledge_agent_node(
     state: SupervisorAgentState,
     config: RunnableConfig | None = None,
-    *,
-    graph: Any = None,
 ) -> dict:
     """Run the knowledge Q&A child graph."""
-    child_graph = graph or _get_knowledge_graph()
-    result = await _invoke_child_with_interrupts(
-        child_graph,
-        _child_input(state),
-        _child_config(config, "knowledge_agent"),
-    )
+    graph = _get_knowledge_graph()
+    try:
+        result = await graph.ainvoke(
+            _child_input(state),
+            _child_config(config, "knowledge_agent"),
+        )
+    except Exception:
+        return {
+            "handled_by": "knowledge_agent",
+            "final_answer": "知识库暂未检索到相关内容，请尝试换个方式提问。",
+        }
     return _child_output(result, "knowledge_agent", "final_answer")
 
 
 async def call_crm_agent_node(
     state: SupervisorAgentState,
     config: RunnableConfig | None = None,
-    *,
-    graph: Any = None,
 ) -> dict:
     """Run the CRM child graph."""
-    child_graph = graph or _get_crm_graph()
-    result = await _invoke_child_with_interrupts(
-        child_graph,
-        _child_input(state),
-        _child_config(config, "crm_agent"),
-    )
+    graph = _get_crm_graph()
+    try:
+        result = await graph.ainvoke(
+            _child_input(state),
+            _child_config(config, "crm_agent"),
+        )
+    except Exception:
+        return {
+            "handled_by": "crm_agent",
+            "final_answer": "CRM 分析遇到错误，请稍后重试。",
+        }
     return _child_output(result, "crm_agent", "crm_report")
 
 
@@ -298,34 +306,16 @@ def _describe_child_result(result: dict, child_name: str) -> str:
 
 # ─── build ──────────────────────────────────────────────────
 
-def build_graph(*, checkpointer=None, store=None):
+def build_graph(store=None):
+    global _store_ref
+    _store_ref = store
+    _clear_child_graph_cache()
+
     workflow = StateGraph(SupervisorAgentState)
-    insurance_graph = _get_insurance_graph(checkpointer=checkpointer, store=store)
-    knowledge_graph = _get_knowledge_graph(checkpointer=checkpointer, store=store)
-    crm_graph = _get_crm_graph(checkpointer=checkpointer, store=store)
-
-    async def call_insurance(
-        state: SupervisorAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        return await call_insurance_agent_node(state, config, graph=insurance_graph)
-
-    async def call_knowledge(
-        state: SupervisorAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        return await call_knowledge_agent_node(state, config, graph=knowledge_graph)
-
-    async def call_crm(
-        state: SupervisorAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        return await call_crm_agent_node(state, config, graph=crm_graph)
-
     workflow.add_node("route_request", route_request_node)
-    workflow.add_node("call_insurance_agent", call_insurance)
-    workflow.add_node("call_knowledge_agent", call_knowledge)
-    workflow.add_node("call_crm_agent", call_crm)
+    workflow.add_node("call_insurance_agent", call_insurance_agent_node)
+    workflow.add_node("call_knowledge_agent", call_knowledge_agent_node)
+    workflow.add_node("call_crm_agent", call_crm_agent_node)
 
     workflow.set_entry_point("route_request")
     workflow.add_conditional_edges(
@@ -341,8 +331,7 @@ def build_graph(*, checkpointer=None, store=None):
     workflow.add_edge("call_knowledge_agent", END)
     workflow.add_edge("call_crm_agent", END)
 
-    return workflow.compile(checkpointer=checkpointer, store=store)
+    return workflow.compile(checkpointer=MemorySaver())
 
 
-# langgraph.json 的无持久化定义；正式 HTTP 入口由 lifespan 注入 PostgreSQL。
 graph = build_graph()

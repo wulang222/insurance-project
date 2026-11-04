@@ -33,9 +33,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Literal
+from typing import Literal, Any
 
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
 
 from knowledge_agent.state import KnowledgeAgentState
 from knowledge_agent.tools import (
@@ -49,17 +50,17 @@ from knowledge_agent.tools import (
 
 logger = logging.getLogger(__name__)
 
+# Store 引用（在 build_graph 时注入，节点通过闭包访问）
+_store_ref: Any = None
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Node 0: 从 Store 加载用户上下文
 # ═══════════════════════════════════════════════════════════════════════════════
 # 目的：在问题重写前，加载用户的完整上下文（画像 + 偏好 + 近期交互）
 # 这样 LLM 重写问题时可以结合用户已知信息，做出更精准的指代消解
 
-async def load_user_context_node(
-    state: KnowledgeAgentState,
-    *,
-    store: Any = None,
-) -> dict:
+async def load_user_context_node(state: KnowledgeAgentState) -> dict:
     """从 PostgreSQL Store 加载用户上下文。
 
     加载内容包括：
@@ -70,12 +71,12 @@ async def load_user_context_node(
     这些信息会传递给 query_rewrite 节点，帮助 LLM 理解"它"指代什么。
     """
     user_id = state.get("user_id", "")
-    if not user_id or store is None:
+    if not user_id or _store_ref is None:
         return {"user_context": {"is_new_user": True}}
 
     try:
         from shared.memory import UserMemoryStore
-        memory = UserMemoryStore(store)
+        memory = UserMemoryStore(_store_ref)
         context = await memory.load_user_context(user_id)
         logger.info(f"用户 {user_id} 上下文已加载: is_new={context.get('is_new_user')}")
         return {"user_context": context}
@@ -196,11 +197,7 @@ async def generate_answer_node(state: KnowledgeAgentState) -> dict:
 # Node 6: 保存交互摘要到 Store
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def save_interaction_node(
-    state: KnowledgeAgentState,
-    *,
-    store: Any = None,
-) -> dict:
+async def save_interaction_node(state: KnowledgeAgentState) -> dict:
     """将本次知识问答的摘要保存到 Store，供后续会话参考。
 
     保存内容：
@@ -210,12 +207,12 @@ async def save_interaction_node(
     - 涉及的产品ID（如果有）
     """
     user_id = state.get("user_id", "")
-    if not user_id or store is None:
+    if not user_id or _store_ref is None:
         return {}
 
     try:
         from shared.memory import UserMemoryStore
-        memory = UserMemoryStore(store)
+        memory = UserMemoryStore(_store_ref)
 
         # 提取涉及的产品ID
         product_ids = []
@@ -253,7 +250,19 @@ def route_by_intent(state: KnowledgeAgentState) -> Literal["db_query", "rag_sear
 # 构建并编译工作流图
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def build_graph(*, checkpointer=None, store=None):
+def _create_checkpointer():
+    """创建 Checkpointer：优先 PG，失败回退到 MemorySaver"""
+    try:
+        import os
+        pg_uri = os.getenv("POSTGRES_URI", "")
+        if pg_uri:
+            logger.info("检测到 POSTGRES_URI，同步回退到 MemorySaver；langgraph dev 模式由服务器管理")
+        return MemorySaver()
+    except Exception:
+        return MemorySaver()
+
+
+def build_graph(store=None):
     """构建知识回答Agent的LangGraph工作流。
 
     节点拓扑：
@@ -264,22 +273,19 @@ def build_graph(*, checkpointer=None, store=None):
     Args:
         store: 可选的 BaseStore 实例。传入时启用跨会话上下文加载和交互保存。
     """
+    global _store_ref
+    _store_ref = store
+
     workflow = StateGraph(KnowledgeAgentState)
 
-    async def load_context(state: KnowledgeAgentState) -> dict:
-        return await load_user_context_node(state, store=store)
-
-    async def save_interaction(state: KnowledgeAgentState) -> dict:
-        return await save_interaction_node(state, store=store)
-
     # ── 注册所有节点 ──
-    workflow.add_node("load_user_context", load_context)
+    workflow.add_node("load_user_context", load_user_context_node)      # [NEW]
     workflow.add_node("query_rewrite", query_rewrite_node)
     workflow.add_node("intent_recognition", intent_recognition_node)
     workflow.add_node("db_query", db_query_node)
     workflow.add_node("rag_search", rag_search_node)
     workflow.add_node("generate_answer", generate_answer_node)
-    workflow.add_node("save_interaction", save_interaction)
+    workflow.add_node("save_interaction", save_interaction_node)        # [NEW]
 
     # ── 入口 ──
     workflow.set_entry_point("load_user_context")
@@ -299,10 +305,12 @@ def build_graph(*, checkpointer=None, store=None):
     workflow.add_edge("generate_answer", "save_interaction")
     workflow.add_edge("save_interaction", END)
 
-    return workflow.compile(checkpointer=checkpointer, store=store)
+    # ── 编译 ──
+    checkpointer = _create_checkpointer()
+    return workflow.compile(checkpointer=checkpointer)
 
 
-# langgraph.json 的无持久化定义；正式 HTTP 入口由 lifespan 注入 PostgreSQL。
+# 模块级 graph 实例（独立模式，无 Store）
 graph = build_graph()
 
 

@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { listProducts, saveProduct } from '../api'
+import AdminNav from '../components/AdminNav.vue'
 
 const form = reactive({
   productId: '',
@@ -48,12 +49,7 @@ onMounted(load)
 
 <template>
   <div class="shell">
-    <nav>
-      <a href="/users">用户</a>
-      <a href="/products">产品</a>
-      <a href="/policies">保单</a>
-      <a href="/documents">知识库</a>
-    </nav>
+    <AdminNav />
     <main>
       <section class="panel">
         <h1>保险产品</h1>

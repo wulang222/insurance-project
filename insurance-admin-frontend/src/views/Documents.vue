@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { listChunks, listDocuments, replaceDocument, uploadDocument } from '../api'
+import AdminNav from '../components/AdminNav.vue'
 
 const title = ref('')
 const productId = ref('')
@@ -58,12 +59,7 @@ onMounted(load)
 
 <template>
   <div class="shell">
-    <nav>
-      <a href="/users">用户</a>
-      <a href="/products">产品</a>
-      <a href="/policies">保单</a>
-      <a href="/documents">知识库</a>
-    </nav>
+    <AdminNav />
     <main>
       <section class="panel">
         <h1>知识文档</h1>

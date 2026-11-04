@@ -1,4 +1,4 @@
-﻿[project]
+[project]
 name = "insurance-agent-platform"
 version = "0.1.0"
 description = "智能保险推荐与知识问答平台 — LangGraph + PostgreSQL + MySQL"

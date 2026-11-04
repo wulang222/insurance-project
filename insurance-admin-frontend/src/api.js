@@ -1,9 +1,10 @@
 import axios from 'axios'
+import { clearAdminToken, readAdminToken } from './storage'
 
 const http = axios.create({ baseURL: '/admin', timeout: 30000 })
 
 http.interceptors.request.use((config) => {
-  const token = localStorage.getItem('admin_token')
+  const token = readAdminToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -20,7 +21,7 @@ http.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('admin_token')
+      clearAdminToken()
       if (location.pathname !== '/login') {
         location.href = '/login'
       }

@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { kickUser, searchUsers } from '../api'
+import AdminNav from '../components/AdminNav.vue'
 
 const phoneNumber = ref('')
 const nickName = ref('')
@@ -36,12 +37,7 @@ onMounted(load)
 
 <template>
   <div class="shell">
-    <nav>
-      <a href="/users">用户</a>
-      <a href="/products">产品</a>
-      <a href="/policies">保单</a>
-      <a href="/documents">知识库</a>
-    </nav>
+    <AdminNav />
     <main>
       <section class="panel">
         <h1>C 端用户</h1>

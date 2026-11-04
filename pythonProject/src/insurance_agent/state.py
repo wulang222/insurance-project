@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Annotated, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langgraph.graph.message import add_messages
 
@@ -72,4 +72,3 @@ class InsuranceAgentState(TypedDict, total=False):
     interrupt_reason: str
     profile_source: str
     stored_profile: dict
-    warnings: list[str]

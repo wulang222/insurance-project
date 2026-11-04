@@ -10,12 +10,12 @@ spring:
     nacos:
       discovery:
         username: nacos
-        password: ${NACOS_PASSWORD:}
+        password: insurance@123
         namespace: insurance-${RUN_ENV}
         server-addr: ${NACOS_ADDR}
       config:
         username: nacos
-        password: ${NACOS_PASSWORD:}
+        password: insurance@123
         namespace: insurance-${RUN_ENV}
         server-addr: ${NACOS_ADDR}
         file-extension: yaml

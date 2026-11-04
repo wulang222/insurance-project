@@ -30,16 +30,14 @@
   └──────────────────┘
 """
 
+from __future__ import annotations
+
 import logging
-import json
-from typing import Any, Literal
+from typing import Literal, Any
 
-from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
-from pydantic import BaseModel, ConfigDict
+from langgraph.checkpoint.memory import MemorySaver
 
-from harness.dependencies import AgentDependencies
-from harness.errors import DependencyUnavailableError
 from knowledge_agent.state import KnowledgeAgentState
 from knowledge_agent.tools import (
     rewrite_question,
@@ -49,17 +47,12 @@ from knowledge_agent.tools import (
     generate_db_answer,
     generate_rag_answer,
 )
-from middleware.model import ModelCallContext, ModelRequest
-from tools.base import ToolCallContext
-from tools.product_tools import ProductSearchInput
 
 logger = logging.getLogger(__name__)
 
+# Store 引用（在 build_graph 时注入，节点通过闭包访问）
+_store_ref: Any = None
 
-class IntentDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    intent: Literal["db", "rag"]
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Node 0: 从 Store 加载用户上下文
@@ -67,11 +60,7 @@ class IntentDecision(BaseModel):
 # 目的：在问题重写前，加载用户的完整上下文（画像 + 偏好 + 近期交互）
 # 这样 LLM 重写问题时可以结合用户已知信息，做出更精准的指代消解
 
-async def load_user_context_node(
-    state: KnowledgeAgentState,
-    *,
-    store: Any = None,
-) -> dict:
+async def load_user_context_node(state: KnowledgeAgentState) -> dict:
     """从 PostgreSQL Store 加载用户上下文。
 
     加载内容包括：
@@ -82,12 +71,12 @@ async def load_user_context_node(
     这些信息会传递给 query_rewrite 节点，帮助 LLM 理解"它"指代什么。
     """
     user_id = state.get("user_id", "")
-    if not user_id or store is None:
+    if not user_id or _store_ref is None:
         return {"user_context": {"is_new_user": True}}
 
     try:
         from shared.memory import UserMemoryStore
-        memory = UserMemoryStore(store)
+        memory = UserMemoryStore(_store_ref)
         context = await memory.load_user_context(user_id)
         logger.info(f"用户 {user_id} 上下文已加载: is_new={context.get('is_new_user')}")
         return {"user_context": context}
@@ -208,11 +197,7 @@ async def generate_answer_node(state: KnowledgeAgentState) -> dict:
 # Node 6: 保存交互摘要到 Store
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def save_interaction_node(
-    state: KnowledgeAgentState,
-    *,
-    store: Any = None,
-) -> dict:
+async def save_interaction_node(state: KnowledgeAgentState) -> dict:
     """将本次知识问答的摘要保存到 Store，供后续会话参考。
 
     保存内容：
@@ -222,12 +207,12 @@ async def save_interaction_node(
     - 涉及的产品ID（如果有）
     """
     user_id = state.get("user_id", "")
-    if not user_id or store is None:
+    if not user_id or _store_ref is None:
         return {}
 
     try:
         from shared.memory import UserMemoryStore
-        memory = UserMemoryStore(store)
+        memory = UserMemoryStore(_store_ref)
 
         # 提取涉及的产品ID
         product_ids = []
@@ -265,7 +250,19 @@ def route_by_intent(state: KnowledgeAgentState) -> Literal["db_query", "rag_sear
 # 构建并编译工作流图
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencies | None = None):
+def _create_checkpointer():
+    """创建 Checkpointer：优先 PG，失败回退到 MemorySaver"""
+    try:
+        import os
+        pg_uri = os.getenv("POSTGRES_URI", "")
+        if pg_uri:
+            logger.info("检测到 POSTGRES_URI，同步回退到 MemorySaver；langgraph dev 模式由服务器管理")
+        return MemorySaver()
+    except Exception:
+        return MemorySaver()
+
+
+def build_graph(store=None):
     """构建知识回答Agent的LangGraph工作流。
 
     节点拓扑：
@@ -276,143 +273,19 @@ def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencie
     Args:
         store: 可选的 BaseStore 实例。传入时启用跨会话上下文加载和交互保存。
     """
+    global _store_ref
+    _store_ref = store
+
     workflow = StateGraph(KnowledgeAgentState)
 
-    async def load_context(state: KnowledgeAgentState) -> dict:
-        return await load_user_context_node(state, store=store)
-
-    async def save_interaction(state: KnowledgeAgentState) -> dict:
-        return await save_interaction_node(state, store=store)
-
-    async def governed_query_rewrite(
-        state: KnowledgeAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        if dependencies is None or dependencies.model_gateway is None:
-            return await query_rewrite_node(state)
-        messages = state.get("messages", [])
-        raw_question = _latest_user_text(messages)
-        history = _format_history(messages[:-1]) if len(messages) > 1 else ""
-        user_context = state.get("user_context", {})
-        if user_context and not user_context.get("is_new_user"):
-            history = f"{json.dumps(user_context, ensure_ascii=False)}\n{history}"
-        try:
-            result = await dependencies.model_gateway.invoke(
-                ModelRequest(
-                    prompt_id="knowledge.rewrite",
-                    variables={"history": history, "question": raw_question},
-                    strategy="extract",
-                ),
-                context=ModelCallContext.from_config(config),
-            )
-            rewritten = result.data
-        except Exception:
-            rewritten = raw_question
-        return {"raw_question": raw_question, "rewritten_question": rewritten}
-
-    async def governed_intent(
-        state: KnowledgeAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        if dependencies is None or dependencies.model_gateway is None:
-            return await intent_recognition_node(state)
-        question = state.get("rewritten_question", "") or state.get("raw_question", "")
-        try:
-            result = await dependencies.model_gateway.invoke(
-                ModelRequest(
-                    prompt_id="knowledge.intent",
-                    variables={"question": question},
-                    strategy="classify",
-                    response_model=IntentDecision,
-                ),
-                context=ModelCallContext.from_config(config),
-            )
-            return {"intent": result.data.intent}
-        except Exception:
-            return {"intent": "rag"}
-
-    async def governed_db_query(
-        state: KnowledgeAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        if (
-            dependencies is None
-            or dependencies.model_gateway is None
-            or dependencies.tool_gateway is None
-        ):
-            return await db_query_node(state)
-        question = state.get("rewritten_question", "")
-        parsed = await dependencies.model_gateway.invoke(
-            ModelRequest(
-                prompt_id="knowledge.query",
-                variables={"question": question},
-                strategy="extract",
-                response_model=ProductSearchInput,
-            ),
-            context=ModelCallContext.from_config(config),
-        )
-        result = await dependencies.tool_gateway.execute(
-            "search_active_insurance_products",
-            parsed.data.model_dump(exclude_none=True),
-            context=ToolCallContext.from_config(config),
-        )
-        return {"db_results": result.data}
-
-    async def governed_rag_search(
-        state: KnowledgeAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        if dependencies is None or dependencies.tool_gateway is None:
-            return await rag_search_node(state)
-        try:
-            result = await dependencies.tool_gateway.execute(
-                "retrieve_policy_evidence",
-                {
-                    "query": state.get("rewritten_question", ""),
-                    "product_ids": [],
-                    "top_k": 10,
-                },
-                context=ToolCallContext.from_config(config),
-            )
-            return {"rag_docs": result.data}
-        except DependencyUnavailableError:
-            return {
-                "rag_docs": [],
-                "warnings": ["知识库暂不可用，本次未生成无证据答案。"],
-            }
-
-    async def governed_answer(
-        state: KnowledgeAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        if dependencies is None or dependencies.model_gateway is None:
-            return await generate_answer_node(state)
-        question = state.get("rewritten_question", "") or state.get("raw_question", "")
-        evidence = state.get("db_results", []) if state.get("intent") == "db" else state.get("rag_docs", [])
-        if not evidence:
-            return {"final_answer": "当前没有检索到可验证的资料，暂时无法给出可靠结论。"}
-        result = await dependencies.model_gateway.invoke(
-            ModelRequest(
-                prompt_id="knowledge.answer",
-                variables={
-                    "question": question,
-                    "intent": state.get("intent", "rag"),
-                    "evidence": json.dumps(evidence, ensure_ascii=False),
-                },
-                strategy="aggregate",
-            ),
-            context=ModelCallContext.from_config(config),
-        )
-        return {"final_answer": result.data}
-
     # ── 注册所有节点 ──
-    workflow.add_node("load_user_context", load_context)
-    workflow.add_node("query_rewrite", governed_query_rewrite)
-    workflow.add_node("intent_recognition", governed_intent)
-    workflow.add_node("db_query", governed_db_query)
-    workflow.add_node("rag_search", governed_rag_search)
-    workflow.add_node("generate_answer", governed_answer)
-    workflow.add_node("save_interaction", save_interaction)
+    workflow.add_node("load_user_context", load_user_context_node)      # [NEW]
+    workflow.add_node("query_rewrite", query_rewrite_node)
+    workflow.add_node("intent_recognition", intent_recognition_node)
+    workflow.add_node("db_query", db_query_node)
+    workflow.add_node("rag_search", rag_search_node)
+    workflow.add_node("generate_answer", generate_answer_node)
+    workflow.add_node("save_interaction", save_interaction_node)        # [NEW]
 
     # ── 入口 ──
     workflow.set_entry_point("load_user_context")
@@ -432,10 +305,12 @@ def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencie
     workflow.add_edge("generate_answer", "save_interaction")
     workflow.add_edge("save_interaction", END)
 
-    return workflow.compile(checkpointer=checkpointer, store=store)
+    # ── 编译 ──
+    checkpointer = _create_checkpointer()
+    return workflow.compile(checkpointer=checkpointer)
 
 
-# langgraph.json 的无持久化定义；正式 HTTP 入口由 lifespan 注入 PostgreSQL。
+# 模块级 graph 实例（独立模式，无 Store）
 graph = build_graph()
 
 
@@ -463,13 +338,3 @@ def _format_history(messages: list) -> str:
         role_label = "用户" if role in ("human", "user") else ("助手" if role in ("ai", "assistant") else role)
         lines.append(f"{role_label}: {content}")
     return "\n".join(lines)
-
-
-def _latest_user_text(messages: list) -> str:
-    for message in reversed(messages):
-        if isinstance(message, dict):
-            if message.get("role", message.get("type")) in ("user", "human"):
-                return str(message.get("content", ""))
-        elif getattr(message, "type", "") == "human":
-            return str(getattr(message, "content", ""))
-    return ""

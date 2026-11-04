@@ -1,6 +1,7 @@
 package com.insurance.insuranceportalservice.chat.controller;
 
 import com.insurance.insurancecommondomain.domain.R;
+import com.insurance.insuranceportalservice.chat.client.PythonAgentClient;
 import com.insurance.insuranceportalservice.chat.entity.dto.QueryMessagesDTO;
 import com.insurance.insuranceportalservice.chat.entity.dto.SendMessageDTO;
 import com.insurance.insuranceportalservice.chat.entity.vo.ChatMessageVO;
@@ -30,6 +31,9 @@ public class ChatController {
 
     @Autowired
     private IChatService chatService;
+
+    @Autowired
+    private PythonAgentClient pythonAgentClient;
 
     // ==================== 会话管理 ====================
 
@@ -123,9 +127,19 @@ public class ChatController {
     @PostMapping("/send/stream")
     public SseEmitter sendMessageStream(@RequestBody @Validated SendMessageDTO sendMessageDTO) {
         Long userId = getCurrentUserId();
-        log.info("流式对话请求: userId={}, sessionId={}", userId,
-                sendMessageDTO.getSessionId());
-        return chatService.sendMessageStream(sendMessageDTO, userId);
+        String sessionId = sendMessageDTO.getSessionId();
+
+        // 如果是新会话，先创建会话并在数据库中记录
+        // 这里简化处理：先通过 service 创建/获取会话，再流式调用 Python
+        // 实际可以优化为异步流程
+
+        log.info("流式对话请求: userId={}, sessionId={}", userId, sessionId);
+
+        return pythonAgentClient.sendMessageStream(
+                sessionId,
+                String.valueOf(userId),
+                sendMessageDTO.getContent()
+        );
     }
 
     // ==================== 工具方法 ====================

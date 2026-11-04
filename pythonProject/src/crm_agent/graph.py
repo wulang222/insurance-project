@@ -11,13 +11,14 @@ CRM Agent — LangGraph 工作流
 简化设计：线性流程，无复杂分支，便于维护和演示
 """
 
+from __future__ import annotations
+
 import json
 import logging
 
-from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
 
-from harness.dependencies import AgentDependencies
 from crm_agent.state import CRMAgentState
 from crm_agent.config import create_llm
 from crm_agent.prompts import CRM_REPORT_PROMPT
@@ -27,7 +28,6 @@ from crm_agent.tools import (
     predict_churn_risk,
     identify_upsell_opportunities,
 )
-from tools.base import ToolCallContext
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +41,13 @@ async def load_customer_node(state: CRMAgentState) -> dict:
     user_id = state.get("user_id", "")
     messages = state.get("messages", [])
 
-    # 当请求携带消息但未指定用户时，保留原有默认用户行为。
+    # 从对话消息中提取用户ID（如果未指定），兼容 dict 和对象
     if not user_id and messages:
+        last_msg = messages[-1]
+        if isinstance(last_msg, dict):
+            content = last_msg.get("content", str(last_msg))
+        else:
+            content = getattr(last_msg, "content", str(last_msg))
         user_id = "default_user"
 
     data = load_customer_data.invoke({"user_id": user_id})
@@ -167,14 +172,14 @@ def _simple_report(state: CRMAgentState) -> str:
     risk_emoji = "🔴" if churn >= 60 else "🟡" if churn >= 30 else "🟢"
 
     lines = [
-        "## 📊 CRM 客户洞察报告",
-        "",
-        "### 客户概览",
+        f"## 📊 CRM 客户洞察报告",
+        f"",
+        f"### 客户概览",
         f"- 客户: {profile.get('name', '未知')}",
         f"- 等级: {profile.get('membership_level', 'standard')}",
         f"- 年度保费: {profile.get('total_premium', 0)}元",
-        "",
-        "### ⚠️ 风险预警",
+        f"",
+        f"### ⚠️ 风险预警",
         f"{risk_emoji} 流失风险评分: {churn}/100",
     ]
 
@@ -191,7 +196,7 @@ def _simple_report(state: CRMAgentState) -> str:
     lines.append("")
     lines.append("### 📋 建议行动")
     lines.append(f"1. 优先处理保单续保提醒（共{len(nodes)}个关键节点）")
-    lines.append("2. 跟进客户情感趋势，主动联系了解需求")
+    lines.append(f"2. 跟进客户情感趋势，主动联系了解需求")
     lines.append(f"3. 推荐{len(upsells)}个加购机会，优先高优先级产品")
 
     return "\n".join(lines)
@@ -201,7 +206,7 @@ def _simple_report(state: CRMAgentState) -> str:
 # Build the Graph
 # ═══════════════════════════════════════════════════════════════
 
-def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencies | None = None):
+def build_graph():
     """构建 CRM Agent 工作流
 
     Returns:
@@ -209,77 +214,12 @@ def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencie
     """
     workflow = StateGraph(CRMAgentState)
 
-    async def governed_load_customer(
-        state: CRMAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        if dependencies is None or dependencies.tool_gateway is None:
-            return await load_customer_node(state)
-        user_id = state.get("user_id") or "default_user"
-        result = await dependencies.tool_gateway.execute(
-            "get_customer_policy_portfolio",
-            {"user_id": user_id},
-            context=ToolCallContext.from_config(config),
-        )
-        data = result.data
-        return {
-            "user_id": user_id,
-            "customer_profile": data.get("profile", {}),
-            "policies": data.get("policies", []),
-            "interaction_history": data.get("interactions", []),
-        }
-
-    async def governed_sentiment(state: CRMAgentState) -> dict:
-        if dependencies is None:
-            return await sentiment_node(state)
-        labels = [
-            item.get("sentiment_label", "neutral")
-            for item in state.get("interaction_history", [])
-        ]
-        summary = "偏向负面" if labels.count("negative") > labels.count("positive") else "中性或正面"
-        return {"sentiment_summary": json.dumps({"overall_sentiment": summary}, ensure_ascii=False)}
-
-    async def governed_churn(state: CRMAgentState) -> dict:
-        if dependencies is None:
-            return await churn_node(state)
-        expired = [item for item in state.get("policies", []) if item.get("status") == "expired"]
-        expiring = [item for item in state.get("policies", []) if item.get("status") == "expiring_soon"]
-        score = min(100, len(expired) * 25 + len(expiring) * 15)
-        return {
-            "churn_risk": score,
-            "churn_reason": json.dumps(["存在失效或临期保单"] if score else [], ensure_ascii=False),
-            "key_time_nodes": [],
-        }
-
-    async def governed_upsell(
-        state: CRMAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        if dependencies is None or dependencies.tool_gateway is None:
-            return await upsell_node(state)
-        result = await dependencies.tool_gateway.execute(
-            "calculate_coverage_gap",
-            {"portfolio": state.get("policies", [])},
-            context=ToolCallContext.from_config(config),
-        )
-        return {
-            "upsell_opportunities": [
-                {"priority": "medium", "product_type": item, "reason": "现有保障缺少该险种"}
-                for item in result.data["missing_types"]
-            ]
-        }
-
-    async def governed_report(state: CRMAgentState) -> dict:
-        if dependencies is None:
-            return await generate_report_node(state)
-        return {"crm_report": _simple_report(state)}
-
     # 添加节点
-    workflow.add_node("load_customer", governed_load_customer)
-    workflow.add_node("analyze_sentiment", governed_sentiment)
-    workflow.add_node("predict_churn", governed_churn)
-    workflow.add_node("identify_upsell", governed_upsell)
-    workflow.add_node("generate_report", governed_report)
+    workflow.add_node("load_customer", load_customer_node)
+    workflow.add_node("analyze_sentiment", sentiment_node)
+    workflow.add_node("predict_churn", churn_node)
+    workflow.add_node("identify_upsell", upsell_node)
+    workflow.add_node("generate_report", generate_report_node)
 
     # 线性流程
     workflow.set_entry_point("load_customer")
@@ -289,7 +229,9 @@ def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencie
     workflow.add_edge("identify_upsell", "generate_report")
     workflow.add_edge("generate_report", END)
 
-    return workflow.compile(checkpointer=checkpointer, store=store)
+    # 编译
+    checkpointer = MemorySaver()
+    return workflow.compile(checkpointer=checkpointer)
 
 
 # 模块级 graph 实例

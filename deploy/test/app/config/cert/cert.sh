@@ -4,7 +4,7 @@
 #--tlsverify --tlscacert=/etc/docker/ca.pem --tlscert=/etc/docker/server-cert.pem --tlskey=/etc/docker/server-key.pem
 
 SERVER="192.168.56.107"
-PASSWORD="${CERT_PASSWORD:?Set CERT_PASSWORD}"
+PASSWORD="123456"
 COUNTRY="CN"
 STATE="ShanXi"
 CITY="XiAn"
@@ -62,3 +62,4 @@ chmod -v 0444 ca.pem server-cert.pem cert.pem
 echo "复制证书到指定目录"
 cp server-*.pem  /etc/docker/
 cp ca.pem /etc/docker/
+

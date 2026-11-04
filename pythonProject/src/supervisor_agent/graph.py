@@ -1,24 +1,31 @@
 """Supervisor graph that routes requests to existing child agents."""
 
+import json
 import logging
+from functools import lru_cache
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
-from langgraph.types import Command, interrupt
-from pydantic import BaseModel, ConfigDict
 
 from crm_agent.graph import build_graph as build_crm_graph
-from harness.dependencies import AgentDependencies
-from insurance_agent.config import create_llm as create_llm  # backward-compatible test seam
+from insurance_agent.config import create_llm
 from insurance_agent.graph import build_graph as build_insurance_graph
 from knowledge_agent.graph import build_graph as build_knowledge_graph
-from middleware.model import ModelCallContext, ModelRequest
 from supervisor_agent.state import AgentRoute, SupervisorAgentState
-from workflows.family_plan import build_family_plan_graph
 logger = logging.getLogger(__name__)
 
+_store_ref: Any = None
+
+
 # ─── helpers (must be defined before build_graph) ───────────
+
+def _clear_child_graph_cache() -> None:
+    _get_insurance_graph.cache_clear()
+    _get_knowledge_graph.cache_clear()
+    _get_crm_graph.cache_clear()
+
 
 def _latest_user_text(messages: list) -> str:
     for msg in reversed(messages):
@@ -33,15 +40,6 @@ def _latest_user_text(messages: list) -> str:
 
 def _rule_route(question: str) -> AgentRoute | None:
     text = question.lower()
-    family_keywords = (
-        "家庭保障",
-        "家庭保险",
-        "全家保障",
-        "全家保险",
-        "家庭规划",
-        "家庭方案",
-        "一家人",
-    )
     crm_keywords = (
         "crm", "客户关系", "客户分析", "流失", "续保", "加购", "复购",
         "客户画像", "保单提醒", "销售跟进", "用户crm",
@@ -54,8 +52,6 @@ def _rule_route(question: str) -> AgentRoute | None:
         "预算", "岁", "年龄", "职业", "程序员", "教师", "销售", "设计师",
     )
 
-    if any(keyword in text for keyword in family_keywords):
-        return "family_plan"
     if any(keyword in text for keyword in crm_keywords):
         return "crm_agent"
     if any(keyword in text for keyword in recommend_intent_keywords):
@@ -87,11 +83,23 @@ def _describe_child_result(result: dict, child_name: str) -> str:
     return f"{child_name} 已完成分析。"
 
 
-class RouteDecision(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    route: AgentRoute
-    reason: str
+def _parse_json_object(content: str) -> dict:
+    text = content.strip()
+    # 去掉 markdown 代码块
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.startswith("json"):
+            text = text[4:].strip()
+    # 去掉 markdown 粗体标记（偶尔 LLM 用 **insurance_agent**）
+    text = text.replace("**", "")
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end >= start:
+        text = text[start:end + 1]
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {}
 
 
 def _child_input(state: SupervisorAgentState) -> dict:
@@ -106,10 +114,11 @@ def _child_config(config: RunnableConfig | None, child_name: str) -> RunnableCon
     parent_thread_id = parent_config.get("thread_id", "default")
     child_config: RunnableConfig = {
         "configurable": {
-            **parent_config,
             "thread_id": f"{parent_thread_id}:{child_name}",
         }
     }
+    if parent_config.get("user_id"):
+        child_config["configurable"]["user_id"] = parent_config["user_id"]
     return child_config
 
 
@@ -121,25 +130,8 @@ def _child_output(result: dict, child_name: str, answer_key: str) -> dict:
     return {
         "child_result": result,
         "final_answer": answer or str(result),
-        "handled_by": result.get("handled_by") or child_name,
-        "warnings": result.get("warnings", []),
-        "citations": result.get("citations", []),
+        "handled_by": child_name,
     }
-
-
-async def _invoke_child_with_interrupts(
-    graph: Any,
-    input_data: dict[str, Any],
-    config: RunnableConfig,
-) -> dict[str, Any]:
-    """Propagate child interrupts to the parent and resume the same child thread."""
-
-    result = await graph.ainvoke(input_data, config)
-    while result.get("__interrupt__"):
-        child_interrupt = result["__interrupt__"][0]
-        resume_payload = interrupt(getattr(child_interrupt, "value", child_interrupt))
-        result = await graph.ainvoke(Command(resume=resume_payload), config)
-    return result
 
 
 def _extract_message_reply(result: dict) -> str:
@@ -161,38 +153,19 @@ def _extract_message_reply(result: dict) -> str:
     return str(content)
 
 
-def _get_insurance_graph(*, checkpointer=None, store=None, dependencies=None):
-    return build_insurance_graph(
-        checkpointer=checkpointer,
-        store=store,
-        dependencies=dependencies,
-    )
+@lru_cache(maxsize=1)
+def _get_insurance_graph():
+    return build_insurance_graph(store=_store_ref)
 
 
-def _get_knowledge_graph(*, checkpointer=None, store=None, dependencies=None):
-    return build_knowledge_graph(
-        checkpointer=checkpointer,
-        store=store,
-        dependencies=dependencies,
-    )
+@lru_cache(maxsize=1)
+def _get_knowledge_graph():
+    return build_knowledge_graph(store=_store_ref)
 
 
-def _get_crm_graph(*, checkpointer=None, store=None, dependencies=None):
-    return build_crm_graph(
-        checkpointer=checkpointer,
-        store=store,
-        dependencies=dependencies,
-    )
-
-
-def _get_family_plan_graph(*, checkpointer=None, store=None, dependencies=None):
-    registry = dependencies.agent_registry if dependencies is not None else None
-    return build_family_plan_graph(
-        dependencies=dependencies,
-        registry=registry,
-        checkpointer=checkpointer,
-        store=store,
-    )
+@lru_cache(maxsize=1)
+def _get_crm_graph():
+    return build_crm_graph()
 
 
 # ─── ROUTE_PROMPT ───────────────────────────────────────────
@@ -204,10 +177,9 @@ ROUTE_PROMPT = """你是一个保险服务多智能体系统的路由网关。
 - insurance_agent（保险顾问）：负责保险产品推荐、方案匹配，以及基于年龄、职业、预算、险种提供的购买建议。
 - knowledge_agent（知识库）：负责保险知识问答、产品条款、等待期、理赔规则、价格/保额/资产查询以及常规名词解释。
 - crm_agent（客户管理）：负责客户 CRM 分析、客户画像/报告、流失风险评估、续保提醒、二次开拓机会（客情维护）以及保单/客户关系管理。
-- family_plan（家庭保障规划）：组合画像、现有保单、保障缺口、产品、知识和合规检查。
 
 请仅返回 JSON 格式数据：
-{"route":"insurance_agent|knowledge_agent|crm_agent|family_plan","reason":"简短的分类理由"}
+{"route":"insurance_agent|knowledge_agent|crm_agent","reason":"简短的分类理由"}
 
 用户请求：
 {question}
@@ -226,99 +198,79 @@ async def route_request_node(state: SupervisorAgentState) -> dict:
     if route is None:
         route = "knowledge_agent"
         reason = "defaulted to knowledge_agent"
+        try:
+            llm = create_llm(temperature=0)
+            response = llm.invoke(ROUTE_PROMPT.format(question=question))
+            content = response.content if hasattr(response, "content") else str(response)
+            parsed = _parse_json_object(content)
+            llm_route = parsed.get("route", "")
+            # 清理可能的空白和特殊字符
+            llm_route = str(llm_route).strip().strip('"').strip("'")
+            if llm_route in ("insurance_agent", "knowledge_agent", "crm_agent"):
+                route = llm_route
+                reason = str(parsed.get("reason", "classified by LLM"))
+        except Exception as exc:
+            pass  # 规则路由已经覆盖了主要场景，LLM 失败静默处理
 
     return {"route": route, "route_reason": reason}
-
-
-async def _governed_route_request_node(
-    state: SupervisorAgentState,
-    config: RunnableConfig | None,
-    dependencies: AgentDependencies,
-) -> dict:
-    question = _latest_user_text(state.get("messages", []))
-    route = _rule_route(question)
-    if route is not None:
-        return {"route": route, "route_reason": "matched local routing rules"}
-    if dependencies.model_gateway is None:
-        return await route_request_node(state)
-    try:
-        result = await dependencies.model_gateway.invoke(
-            ModelRequest(
-                prompt_id="supervisor.route",
-                variables={"question": question},
-                strategy="route",
-                response_model=RouteDecision,
-            ),
-            context=ModelCallContext.from_config(config),
-        )
-        decision: RouteDecision = result.data
-        return {"route": decision.route, "route_reason": decision.reason}
-    except Exception:
-        return {"route": "knowledge_agent", "route_reason": "safe routing fallback"}
 
 
 async def call_insurance_agent_node(
     state: SupervisorAgentState,
     config: RunnableConfig | None = None,
-    *,
-    graph: Any = None,
 ) -> dict:
     """Run the insurance recommendation child graph."""
-    child_graph = graph or _get_insurance_graph()
-    result = await _invoke_child_with_interrupts(
-        child_graph,
-        _child_input(state),
-        _child_config(config, "insurance_agent"),
-    )
+    graph = _get_insurance_graph()
+    try:
+        result = await graph.ainvoke(
+            _child_input(state),
+            _child_config(config, "insurance_agent"),
+        )
+    except Exception:
+        # interrupt() 抛出的中断（如缺少年龄/职业等必填字段）
+        return {
+            "handled_by": "insurance_agent",
+            "final_answer": "需要您补充年龄、职业、预算和意向险种信息，才能为您精准推荐保险产品。",
+        }
     return _child_output(result, "insurance_agent", "final_recommendation")
 
 
 async def call_knowledge_agent_node(
     state: SupervisorAgentState,
     config: RunnableConfig | None = None,
-    *,
-    graph: Any = None,
 ) -> dict:
     """Run the knowledge Q&A child graph."""
-    child_graph = graph or _get_knowledge_graph()
-    result = await _invoke_child_with_interrupts(
-        child_graph,
-        _child_input(state),
-        _child_config(config, "knowledge_agent"),
-    )
+    graph = _get_knowledge_graph()
+    try:
+        result = await graph.ainvoke(
+            _child_input(state),
+            _child_config(config, "knowledge_agent"),
+        )
+    except Exception:
+        return {
+            "handled_by": "knowledge_agent",
+            "final_answer": "知识库暂未检索到相关内容，请尝试换个方式提问。",
+        }
     return _child_output(result, "knowledge_agent", "final_answer")
 
 
 async def call_crm_agent_node(
     state: SupervisorAgentState,
     config: RunnableConfig | None = None,
-    *,
-    graph: Any = None,
 ) -> dict:
     """Run the CRM child graph."""
-    child_graph = graph or _get_crm_graph()
-    result = await _invoke_child_with_interrupts(
-        child_graph,
-        _child_input(state),
-        _child_config(config, "crm_agent"),
-    )
+    graph = _get_crm_graph()
+    try:
+        result = await graph.ainvoke(
+            _child_input(state),
+            _child_config(config, "crm_agent"),
+        )
+    except Exception:
+        return {
+            "handled_by": "crm_agent",
+            "final_answer": "CRM 分析遇到错误，请稍后重试。",
+        }
     return _child_output(result, "crm_agent", "crm_report")
-
-
-async def call_family_plan_node(
-    state: SupervisorAgentState,
-    config: RunnableConfig | None = None,
-    *,
-    graph: Any = None,
-) -> dict:
-    """Run the composable family protection planning graph."""
-    child_graph = graph or _get_family_plan_graph()
-    result = await _invoke_child_with_interrupts(
-        child_graph,
-        _child_input(state),
-        _child_config(config, "family_plan"),
-    )
-    return _child_output(result, "family_plan", "final_answer")
 
 
 def route_to_child(state: SupervisorAgentState) -> str:
@@ -327,8 +279,6 @@ def route_to_child(state: SupervisorAgentState) -> str:
         return "call_insurance_agent"
     if route == "crm_agent":
         return "call_crm_agent"
-    if route == "family_plan":
-        return "call_family_plan"
     return "call_knowledge_agent"
 
 
@@ -356,66 +306,16 @@ def _describe_child_result(result: dict, child_name: str) -> str:
 
 # ─── build ──────────────────────────────────────────────────
 
-def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencies | None = None):
+def build_graph(store=None):
+    global _store_ref
+    _store_ref = store
+    _clear_child_graph_cache()
+
     workflow = StateGraph(SupervisorAgentState)
-    insurance_graph = _get_insurance_graph(
-        checkpointer=checkpointer,
-        store=store,
-        dependencies=dependencies,
-    )
-    knowledge_graph = _get_knowledge_graph(
-        checkpointer=checkpointer,
-        store=store,
-        dependencies=dependencies,
-    )
-    crm_graph = _get_crm_graph(
-        checkpointer=checkpointer,
-        store=store,
-        dependencies=dependencies,
-    )
-    family_plan_graph = _get_family_plan_graph(
-        checkpointer=checkpointer,
-        store=store,
-        dependencies=dependencies,
-    )
-
-    async def route_request(
-        state: SupervisorAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        if dependencies is None:
-            return await route_request_node(state)
-        return await _governed_route_request_node(state, config, dependencies)
-
-    async def call_insurance(
-        state: SupervisorAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        return await call_insurance_agent_node(state, config, graph=insurance_graph)
-
-    async def call_knowledge(
-        state: SupervisorAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        return await call_knowledge_agent_node(state, config, graph=knowledge_graph)
-
-    async def call_crm(
-        state: SupervisorAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        return await call_crm_agent_node(state, config, graph=crm_graph)
-
-    async def call_family_plan(
-        state: SupervisorAgentState,
-        config: RunnableConfig | None = None,
-    ) -> dict:
-        return await call_family_plan_node(state, config, graph=family_plan_graph)
-
-    workflow.add_node("route_request", route_request)
-    workflow.add_node("call_insurance_agent", call_insurance)
-    workflow.add_node("call_knowledge_agent", call_knowledge)
-    workflow.add_node("call_crm_agent", call_crm)
-    workflow.add_node("call_family_plan", call_family_plan)
+    workflow.add_node("route_request", route_request_node)
+    workflow.add_node("call_insurance_agent", call_insurance_agent_node)
+    workflow.add_node("call_knowledge_agent", call_knowledge_agent_node)
+    workflow.add_node("call_crm_agent", call_crm_agent_node)
 
     workflow.set_entry_point("route_request")
     workflow.add_conditional_edges(
@@ -425,16 +325,13 @@ def build_graph(*, checkpointer=None, store=None, dependencies: AgentDependencie
             "call_insurance_agent": "call_insurance_agent",
             "call_knowledge_agent": "call_knowledge_agent",
             "call_crm_agent": "call_crm_agent",
-            "call_family_plan": "call_family_plan",
         },
     )
     workflow.add_edge("call_insurance_agent", END)
     workflow.add_edge("call_knowledge_agent", END)
     workflow.add_edge("call_crm_agent", END)
-    workflow.add_edge("call_family_plan", END)
 
-    return workflow.compile(checkpointer=checkpointer, store=store)
+    return workflow.compile(checkpointer=MemorySaver())
 
 
-# langgraph.json 的无持久化定义；正式 HTTP 入口由 lifespan 注入 PostgreSQL。
 graph = build_graph()

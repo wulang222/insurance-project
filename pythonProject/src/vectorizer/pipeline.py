@@ -9,7 +9,6 @@ import sys
 import time
 
 from dotenv import load_dotenv
-from vectorizer.config import VectorizerConfig
 
 logging.basicConfig(
     level=logging.INFO,
@@ -84,6 +83,7 @@ def run_pipeline(config: "VectorizerConfig | None" = None) -> int:
         写入 Milvus 的 chunk 总数。
     """
     if config is None:
+        from vectorizer.config import VectorizerConfig
         config = VectorizerConfig()
 
     start_time = time.time()

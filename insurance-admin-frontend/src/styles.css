@@ -1,0 +1,98 @@
+:root {
+  color: #1f2933;
+  font-family: "Segoe UI", sans-serif;
+  background: #f4f6f8;
+}
+
+body {
+  margin: 0;
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+button {
+  background: #0f6b5c;
+  color: white;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+input, select, textarea {
+  border: 1px solid #c5ced6;
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  min-height: 100vh;
+}
+
+nav {
+  background: #12352f;
+  color: white;
+  padding: 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+nav a {
+  color: white;
+  text-decoration: none;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+nav a.router-link-active {
+  background: #0f6b5c;
+}
+
+main {
+  padding: 24px;
+}
+
+.panel {
+  background: white;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  text-align: left;
+  border-bottom: 1px solid #e6ebf0;
+  padding: 8px;
+  vertical-align: top;
+}
+
+.error {
+  color: #9b1c1c;
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #e6ebf0;
+}
+
+.badge.processing { background: #fde68a; }
+.badge.available { background: #bbf7d0; }
+.badge.failed { background: #fecaca; }

@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "langchain>=1.0.0",
+    "langchain-text-splitters>=0.3.0",
     "langchain-anthropic>=1.0.0",
     "langgraph>=1.0.0",
     "python-dotenv>=1.0.1",
@@ -48,6 +49,10 @@ include = ["**/*.py"]
 
 [[tool.uv.build-backend.packages]]
 from = "src/knowledge_agent"
+include = ["**/*.py"]
+
+[[tool.uv.build-backend.packages]]
+from = "src/knowledge"
 include = ["**/*.py"]
 
 [[tool.uv.build-backend.packages]]

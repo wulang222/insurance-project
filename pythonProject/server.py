@@ -7,8 +7,9 @@ responsible for child-agent coordination.
 
 from __future__ import annotations
 
-import logging
 import json
+import logging
+import os
 import sys
 import uuid
 from pathlib import Path
@@ -39,6 +40,26 @@ app.add_middleware(
 )
 
 supervisor_graph = build_supervisor_graph()
+
+from knowledge.api import build_knowledge_router  # noqa: E402
+from knowledge.store import ExistingMilvusDocumentStore  # noqa: E402
+from shared.milvus_utils import get_embedding_function  # noqa: E402
+
+
+def embed_for_ingest(texts: list[str]) -> list[list[float]]:
+    embed = get_embedding_function()
+    if embed is None:
+        raise RuntimeError("embedding provider is unavailable")
+    return embed(texts)
+
+
+app.include_router(
+    build_knowledge_router(
+        store=ExistingMilvusDocumentStore(),
+        embed=embed_for_ingest,
+        token=os.getenv("KNOWLEDGE_INTERNAL_TOKEN", ""),
+    )
+)
 
 
 class ChatRequest(BaseModel):
